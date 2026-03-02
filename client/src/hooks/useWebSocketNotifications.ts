@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface WebSocketNotification {
   notificationType: string;
@@ -19,6 +19,18 @@ interface WebSocketMessage {
   timestamp?: number;
 }
 
+/**
+ * Check if running on production environment
+ */
+const isProductionEnvironment = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname;
+  return hostname.includes("farmconnekt.com") || 
+         hostname.includes("railway") || 
+         hostname.includes("manus.space") ||
+         hostname.includes("herokuapp.com");
+};
+
 export function useWebSocketNotifications(userId: number | null) {
   const ws = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -29,6 +41,13 @@ export function useWebSocketNotifications(userId: number | null) {
 
   const connect = useCallback(() => {
     if (!userId) return;
+
+    // Skip WebSocket on production
+    if (isProductionEnvironment()) {
+      console.log('[WebSocket] Production environment detected, skipping WebSocket notifications');
+      setIsConnected(false);
+      return;
+    }
 
     try {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -132,7 +151,7 @@ export function useWebSocketNotifications(userId: number | null) {
   }, []);
 
   useEffect(() => {
-    if (userId) {
+    if (userId && !isProductionEnvironment()) {
       connect();
     }
 

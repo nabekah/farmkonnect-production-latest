@@ -2,6 +2,19 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 
+/**
+ * Detect if running on Railway or production environment
+ * where WebSocket may have connectivity issues
+ */
+const isProductionEnvironment = (): boolean => {
+  const hostname = window.location.hostname;
+  // Check for production domains
+  return hostname.includes('farmconnekt.com') || 
+         hostname.includes('railway') || 
+         hostname.includes('manus.space') ||
+         hostname.includes('herokuapp.com');
+};
+
 export interface WebSocketMessage {
   type: string;
   [key: string]: any;
@@ -52,6 +65,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   const connect = useCallback(() => {
     if (!user) {
       console.log('[WebSocket] No user, skipping connection');
+      return;
+    }
+
+    // Skip WebSocket on production environments due to proxy/load balancer issues
+    if (isProductionEnvironment()) {
+      console.log('[WebSocket] Production environment detected, using polling instead of WebSocket');
+      wsFailedRef.current = true;
+      setIsReconnecting(false);
+      setIsConnected(false);
       return;
     }
 
@@ -150,12 +172,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
     };
 
     ws.onerror = (event) => {
-      if (process.env.NODE_ENV === 'development') {
-        const errorMsg = event instanceof Event ? `WebSocket error: ${event.type}` : String(event);
-        console.debug('[WebSocket] Connection error (expected):', errorMsg);
-      }
+      console.debug('[WebSocket] Connection error:', event);
       if (reconnectAttemptsRef.current === 0) {
         wsFailedRef.current = true;
+        console.warn('[WebSocket] Initial connection failed, will use polling fallback');
       }
     };
 
@@ -163,6 +183,15 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
   }, [user, tokenData?.token]);
 
   useEffect(() => {
+    // Skip WebSocket connection on production
+    if (isProductionEnvironment()) {
+      console.log('[WebSocket] Skipping WebSocket on production, using polling only');
+      wsFailedRef.current = true;
+      setIsConnected(false);
+      setIsReconnecting(false);
+      return;
+    }
+
     if (!isLoadingToken && tokenData?.token) {
       connect();
     }

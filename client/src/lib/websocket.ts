@@ -295,12 +295,24 @@ class WebSocketService {
   }
 }
 
+/**
+ * Check if running on production environment
+ */
+const isProductionEnvironment = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname;
+  return hostname.includes("farmconnekt.com") || 
+         hostname.includes("railway") || 
+         hostname.includes("manus.space") ||
+         hostname.includes("herokuapp.com");
+};
+
 // Create singleton instance
-const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+const wsUrl = import.meta.env.VITE_WS_URL || `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 export const wsService = new WebSocketService(wsUrl);
 
-// Auto-connect on module load (only in browser)
-if (typeof window !== "undefined" && typeof document !== "undefined") {
+// Auto-connect on module load (only in browser and not on production)
+if (typeof window !== "undefined" && typeof document !== "undefined" && !isProductionEnvironment()) {
   // Delay connection to ensure DOM is ready
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
@@ -313,6 +325,8 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
       console.warn("WebSocket connection failed on startup:", error);
     });
   }
+} else if (isProductionEnvironment()) {
+  console.log("[WebSocket] Production environment detected, skipping auto-connect");
 }
 
 export default wsService;

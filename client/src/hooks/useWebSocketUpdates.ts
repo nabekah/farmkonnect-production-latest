@@ -21,6 +21,18 @@ interface UseWebSocketUpdatesOptions {
 }
 
 /**
+ * Check if running on production environment
+ */
+const isProductionEnvironment = (): boolean => {
+  if (typeof window === "undefined") return false;
+  const hostname = window.location.hostname;
+  return hostname.includes("farmconnekt.com") || 
+         hostname.includes("railway") || 
+         hostname.includes("manus.space") ||
+         hostname.includes("herokuapp.com");
+};
+
+/**
  * Hook for WebSocket real-time updates
  * Handles connection, subscriptions, and message handling
  */
@@ -48,6 +60,13 @@ export const useWebSocketUpdates = (options: UseWebSocketUpdatesOptions) => {
    * Connect to WebSocket server
    */
   const connect = useCallback(() => {
+    // Skip WebSocket on production
+    if (isProductionEnvironment()) {
+      console.log('[WebSocket] Production environment detected, skipping WebSocket updates')
+      setIsConnected(false)
+      return
+    }
+
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       return
     }
@@ -175,9 +194,11 @@ export const useWebSocketUpdates = (options: UseWebSocketUpdatesOptions) => {
     setIsConnected(false)
   }, [])
 
-  // Connect on mount
+  // Connect on mount (skip on production)
   useEffect(() => {
-    connect()
+    if (!isProductionEnvironment()) {
+      connect()
+    }
 
     return () => {
       disconnect()
