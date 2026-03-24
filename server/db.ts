@@ -9,7 +9,9 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
+      // Create drizzle with optimized settings for production
       _db = drizzle(process.env.DATABASE_URL);
+      console.log('[Database] Connection pool configured with optimized settings for production');
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

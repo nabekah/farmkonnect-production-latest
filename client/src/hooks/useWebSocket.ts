@@ -68,13 +68,11 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       return;
     }
 
-    // Skip WebSocket on production environments due to proxy/load balancer issues
+    // Attempt WebSocket connection on all environments with automatic fallback
+    // Production environments will fallback to polling if WebSocket fails
     if (isProductionEnvironment()) {
-      console.log('[WebSocket] Production environment detected, using polling instead of WebSocket');
-      wsFailedRef.current = true;
-      setIsReconnecting(false);
-      setIsConnected(false);
-      return;
+      console.log('[WebSocket] Production environment detected - attempting WebSocket with fallback to polling');
+      // Don't skip - attempt connection with timeout
     }
 
     if (wsFailedRef.current) {
