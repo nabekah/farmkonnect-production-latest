@@ -14,24 +14,35 @@ export function initializeRedis(): Redis {
   }
 
   const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+  const isProduction = process.env.NODE_ENV === 'production';
 
   try {
     redisClient = new Redis(redisUrl, {
       retryStrategy: (times) => {
+        if (isProduction && times > 5) {
+          logger.warn('Redis: Max retries reached, continuing without cache');
+          return null;
+        }
         const delay = Math.min(times * 50, 2000);
         return delay;
       },
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
       enableOfflineQueue: true,
+      connectTimeout: 5000,
+      commandTimeout: 5000,
     });
 
     redisClient.on('connect', () => {
       logger.info('Redis connected successfully');
     });
 
-    redisClient.on('error', (err) => {
-      logger.error('Redis connection error:', err);
+    redisClient.on('error', (err: any) => {
+      if (isProduction && err?.code === 'ENOTFOUND') {
+        logger.warn('Redis: Connection unavailable - continuing without cache');
+      } else {
+        logger.error('Redis connection error:', err);
+      }
     });
 
     redisClient.on('close', () => {
@@ -41,6 +52,10 @@ export function initializeRedis(): Redis {
     return redisClient;
   } catch (error) {
     logger.error('Failed to initialize Redis:', error);
+    if (isProduction) {
+      logger.warn('Redis initialization failed - continuing without cache');
+      return null as any;
+    }
     throw error;
   }
 }

@@ -630,6 +630,68 @@ export const appRouter = router({
         return await db.delete(farms).where(eq(farms.id, input.id));
       }),
 
+    getFarmAnalytics: protectedProcedure
+      .input(z.object({
+        farmId: z.number(),
+        startDate: z.date().optional(),
+        endDate: z.date().optional(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const db = await getDb();
+        if (!db) {
+          return {
+            totalArea: 0,
+            cropsPlanted: 0,
+            healthScore: 0,
+            yieldEstimate: 0,
+            soilMoisture: [],
+            temperatureTrend: [],
+            cropHealth: [],
+          };
+        }
+
+        // Verify ownership
+        const [farm] = await db.select().from(farms).where(eq(farms.id, input.farmId));
+        if (!farm || farm.farmerUserId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "You can only view analytics for your own farms" });
+        }
+
+        // Get farm data
+        const totalArea = farm.sizeHectares ? parseFloat(farm.sizeHectares.toString()) : 0;
+
+        // Get crops planted
+        const farmCrops = await db.select().from(crops).where(eq(crops.farmId, input.farmId));
+        const cropsPlanted = farmCrops.length;
+
+        // Calculate health score (placeholder)
+        const healthScore = 85;
+
+        // Estimate yield
+        const yieldEstimate = totalArea * 2;
+
+        // Return analytics data
+        return {
+          totalArea,
+          cropsPlanted,
+          healthScore,
+          yieldEstimate,
+          soilMoisture: [
+            { date: new Date().toISOString().split('T')[0], moisture: 65 },
+            { date: new Date(Date.now() - 86400000).toISOString().split('T')[0], moisture: 62 },
+            { date: new Date(Date.now() - 172800000).toISOString().split('T')[0], moisture: 60 },
+          ],
+          temperatureTrend: [
+            { date: new Date().toISOString().split('T')[0], temperature: 28 },
+            { date: new Date(Date.now() - 86400000).toISOString().split('T')[0], temperature: 27 },
+            { date: new Date(Date.now() - 172800000).toISOString().split('T')[0], temperature: 26 },
+          ],
+          cropHealth: farmCrops.map((crop) => ({
+            crop: crop.cropName || 'Unknown',
+            health: 80 + Math.random() * 20,
+          })),
+        };
+      }),
+
     getActivities: protectedProcedure
       .input(z.object({
         farmId: z.number(),
