@@ -122,6 +122,28 @@ export function serveStatic(app: express.Express) {
 
   console.log(`[Static] ✓ Serving static files from: ${finalDistPath}`);
 
+  // Middleware to set correct MIME types for static assets
+  app.use((req, res, next) => {
+    if (req.path.endsWith('.css')) {
+      res.set('Content-Type', 'text/css; charset=utf-8');
+    } else if (req.path.endsWith('.js')) {
+      res.set('Content-Type', 'application/javascript; charset=utf-8');
+    } else if (req.path.endsWith('.json')) {
+      res.set('Content-Type', 'application/json; charset=utf-8');
+    } else if (req.path.endsWith('.svg')) {
+      res.set('Content-Type', 'image/svg+xml');
+    } else if (req.path.endsWith('.woff2')) {
+      res.set('Content-Type', 'font/woff2');
+    } else if (req.path.endsWith('.woff')) {
+      res.set('Content-Type', 'font/woff');
+    } else if (req.path.endsWith('.ttf')) {
+      res.set('Content-Type', 'font/ttf');
+    } else if (req.path.endsWith('.eot')) {
+      res.set('Content-Type', 'application/vnd.ms-fontobject');
+    }
+    next();
+  });
+
   // Serve static files with proper cache headers
   app.use(express.static(finalDistPath, {
     maxAge: "1d",
@@ -130,6 +152,12 @@ export function serveStatic(app: express.Express) {
 
   // Serve index.html for all routes that don't match a file
   app.use("*", (req, res) => {
+    // Skip if request is for a file with extension
+    if (req.path.includes('.')) {
+      res.status(404).send('Not Found');
+      return;
+    }
+
     const indexPath = path.resolve(finalDistPath, "index.html");
     
     if (!fs.existsSync(indexPath)) {

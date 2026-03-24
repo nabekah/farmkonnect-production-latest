@@ -1094,8 +1094,8 @@ function AppContent() {
     initTheme();
   }, []);
 
-  // Prevent infinite re-renders by memoizing WebSocket hook
-  const wsStatus = useWebSocket();
+  // Use the WebSocket status from the first hook call
+  const wsStatus = { isConnected, isReconnecting, wsAvailable };
 
   return (
     <ErrorBoundary>
