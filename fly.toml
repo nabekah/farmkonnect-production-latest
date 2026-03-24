@@ -1,0 +1,106 @@
+# Fly.io Configuration for FarmKonnect
+# Full WebSocket support enabled
+
+app = "farmkonnect"
+primary_region = "iad"  # US East (Virginia) - optimal for Ghana access
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 1
+  
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 800
+
+[http_service.tcp_checks]
+  [[http_service.tcp_checks]]
+    grace_period = "30s"
+    interval = "15s"
+    timeout = "5s"
+
+[http_service.http_checks]
+  [[http_service.http_checks]]
+    interval = 10
+    grace_period = "30s"
+    method = "get"
+    path = "/api/health"
+    protocol = "http"
+    timeout = 5
+    tls_skip_verify = false
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 3000
+  
+  [[services.ports]]
+    number = 80
+    handlers = ["http"]
+    force_https = true
+  
+  [[services.ports]]
+    number = 443
+    handlers = ["tls", "http"]
+  
+  [services.concurrency]
+    type = "connections"
+    hard_limit = 1000
+    soft_limit = 800
+  
+  [[services.tcp_checks]]
+    grace_period = "30s"
+    interval = "15s"
+    timeout = "5s"
+
+# WebSocket support - Fly.io handles WebSocket upgrades automatically
+# No special configuration needed - just ensure your app handles ws:// and wss://
+
+[processes]
+  app = "node dist/index.js"
+
+[[statics]]
+  guest_path = "/app/dist/client"
+  url_prefix = "/"
+
+[env]
+  # Application environment
+  NODE_ENV = "production"
+  
+  # Database will be configured via secrets
+  # DATABASE_URL = set via fly secrets set
+
+[metrics]
+  port = 9090
+  path = "/metrics"
+
+# Auto-scaling configuration
+[auto_stop_machines]
+  enabled = true
+  stop_signal = "SIGINT"
+  stop_signal_hard_limit = "30s"
+
+[auto_start_machines]
+  enabled = true
+
+# Deployment configuration
+[deploy]
+  release_command = "node dist/index.js --migrate"
+  strategy = "rolling"
+
+# Volumes for persistent data if needed
+# [[mounts]]
+#   source = "farmkonnect_data"
+#   destination = "/app/data"
+
+# Backup configuration
+[backup]
+  enabled = false
