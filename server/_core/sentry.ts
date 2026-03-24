@@ -7,7 +7,11 @@ try {
   const profiling = require('@sentry/profiling-node');
   ProfilingIntegration = profiling.ProfilingIntegration;
 } catch (e) {
-  logger.warn('Sentry profiling integration not available');
+  // Profiling integration is optional in development/test environments
+  // In production, it's recommended but not required
+  if (process.env.NODE_ENV === 'production') {
+    logger.warn('Sentry profiling integration not available - install @sentry/profiling-node for production profiling');
+  }
 }
 
 /**
