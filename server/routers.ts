@@ -2,6 +2,8 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
+import { withCache, invalidateCache, cacheKeys } from "./_core/redis";
+import { queryTTL, invalidationPatterns } from "./_core/cacheMiddleware";
 import { users } from "../drizzle/schema";
 import { desc } from "drizzle-orm";
 import { getDb, createUserAccount } from "./db";
@@ -532,9 +534,16 @@ export const appRouter = router({
   // ============================================================================
   farms: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      const db = await getDb();
-      if (!db) return [];
-      return await db.select().from(farms).where(eq(farms.farmerUserId, ctx.user.id));
+      // Use cache for farm list (30 minute TTL)
+      return await withCache(
+        cacheKeys.farms(ctx.user.id),
+        async () => {
+          const db = await getDb();
+          if (!db) return [];
+          return await db.select().from(farms).where(eq(farms.farmerUserId, ctx.user.id));
+        },
+        queryTTL.farmsList
+      );
     }),
 
     create: protectedProcedure
@@ -548,13 +557,16 @@ export const appRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
 
-        return await db.insert(farms).values({
+        const result = await db.insert(farms).values({
           farmerUserId: ctx.user.id,
           farmName: input.farmName,
           location: input.location,
           sizeHectares: input.sizeHectares as any,
           farmType: input.farmType || "mixed",
         });
+        // Invalidate cache after creating farm
+        await invalidateCache(cacheKeys.farms(ctx.user.id));
+        return result;
       }),
 
     update: protectedProcedure
@@ -578,6 +590,9 @@ export const appRouter = router({
         if (!farm || farm.farmerUserId !== ctx.user.id) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You can only edit your own farms" });
         }
+        // Invalidate cache after updating farm
+        await invalidateCache(cacheKeys.farms(ctx.user.id));
+        await invalidateCache(cacheKeys.farm(input.id.toString()));
 
         const updateData: any = {
           farmName: input.farmName,
@@ -596,9 +611,7 @@ export const appRouter = router({
       }),
 
     delete: protectedProcedure
-      .input(z.object({
-        id: z.number(),
-      }))
+      .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
@@ -608,6 +621,11 @@ export const appRouter = router({
         if (!farm || farm.farmerUserId !== ctx.user.id) {
           throw new TRPCError({ code: "FORBIDDEN", message: "You can only delete your own farms" });
         }
+        // Invalidate cache after deleting farm
+        await invalidateCache(cacheKeys.farms(ctx.user.id));
+        await invalidateCache(cacheKeys.farm(input.id.toString()));
+        await invalidateCache(`crops:${input.id}`);
+        await invalidateCache(`animals:${input.id}`);
 
         return await db.delete(farms).where(eq(farms.id, input.id));
       }),
@@ -638,26 +656,40 @@ export const appRouter = router({
   // ============================================================================
   crops: router({
     list: protectedProcedure.query(async () => {
-      const db = await getDb();
-      if (!db) return [];
-      return await db.select().from(crops);
+      // Use cache for crops list (30 minute TTL)
+      return await withCache(
+        cacheKeys.crops('all'),
+        async () => {
+          const db = await getDb();
+          if (!db) return [];
+          return await db.select().from(crops);
+        },
+        queryTTL.cropsList
+      );
     }),
 
     cycles: router({
       list: protectedProcedure
         .input(z.object({ farmId: z.number() }))
         .query(async ({ input }) => {
-          const db = await getDb();
-          if (!db) return [];
-          const cycles = await db.select().from(cropCycles).where(eq(cropCycles.farmId, input.farmId));
-          // Join with crops to get variety and cultivar parameters
-          const cyclesWithCropInfo = await Promise.all(
-            cycles.map(async (cycle) => {
-              const [crop] = await db.select().from(crops).where(eq(crops.id, cycle.cropId));
-              return { ...cycle, crop };
-            })
+          // Use cache for crop cycles (30 minute TTL)
+          return await withCache(
+            `crop:cycles:${input.farmId}`,
+            async () => {
+              const db = await getDb();
+              if (!db) return [];
+              const cycles = await db.select().from(cropCycles).where(eq(cropCycles.farmId, input.farmId));
+              // Join with crops to get variety and cultivar parameters
+              const cyclesWithCropInfo = await Promise.all(
+                cycles.map(async (cycle) => {
+                  const [crop] = await db.select().from(crops).where(eq(crops.id, cycle.cropId));
+                  return { ...cycle, crop };
+                })
+              );
+              return cyclesWithCropInfo;
+            },
+            queryTTL.cropsList
           );
-          return cyclesWithCropInfo;
         }),
 
       create: protectedProcedure
@@ -672,19 +704,11 @@ export const appRouter = router({
         }))
         .mutation(async ({ input }) => {
           const db = await getDb();
-          if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
-
-          return await db.insert(cropCycles).values({
-            farmId: input.farmId,
-            cropId: input.cropId,
-            varietyName: input.varietyName,
-            plantingDate: input.plantingDate,
-            expectedHarvestDate: input.expectedHarvestDate,
-            areaPlantedHectares: input.areaPlantedHectares as any,
-            expectedYieldKg: input.expectedYieldKg as any,
-            status: "planted",
-          });
-        }),
+          if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR' });
+          // Invalidate cache after creating crop cycle
+          await invalidateCache(`crop:cycles:${input.farmId}`);
+          return db.insert(cropCycles).values(input);
+        })
 
     }),
 
@@ -918,9 +942,16 @@ export const appRouter = router({
     list: protectedProcedure
       .input(z.object({ farmId: z.number() }))
       .query(async ({ input }) => {
-        const db = await getDb();
-        if (!db) return [];
-        return await db.select().from(animals).where(eq(animals.farmId, input.farmId));
+        // Use cache for animals list (30 minute TTL)
+        return await withCache(
+          cacheKeys.animals(input.farmId.toString()),
+          async () => {
+            const db = await getDb();
+            if (!db) return [];
+            return await db.select().from(animals).where(eq(animals.farmId, input.farmId));
+          },
+          queryTTL.animalsList
+        );
       }),
 
     create: protectedProcedure
@@ -936,6 +967,8 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR" });
+        // Invalidate cache after creating animal
+        await invalidateCache(cacheKeys.animals(input.farmId.toString()));
 
         return await db.insert(animals).values({
           farmId: input.farmId,

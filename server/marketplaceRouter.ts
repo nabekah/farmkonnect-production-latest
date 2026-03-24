@@ -24,6 +24,9 @@ import {
 import { eq, and, desc, like, inArray } from "drizzle-orm";
 import { storagePut } from "./storage";
 import { sendOrderNotificationToBuyer, sendOrderNotificationToSeller, validateGhanaPhone, sendSMS } from "./_core/sms";
+import { withCache, invalidateCache, cacheKeys } from "./_core/redis";
+import { queryTTL } from "./_core/cacheMiddleware";
+import { router, protectedProcedure } from "./_core/trpc";
 
 export const marketplaceRouter = router({
   // ========== IMAGE UPLOAD ==========
@@ -72,26 +75,40 @@ export const marketplaceRouter = router({
   listProducts: protectedProcedure
     .input(z.object({ category: z.string().optional(), search: z.string().optional(), limit: z.number().default(20) }))
     .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return [];
-      
-      const conditions = [eq(marketplaceProducts.status, "active")];
-      if (input.category) conditions.push(eq(marketplaceProducts.category, input.category));
-      if (input.search) conditions.push(like(marketplaceProducts.name, `%${input.search}%`));
-      
-      return await db.select().from(marketplaceProducts)
-        .where(and(...conditions))
-        .limit(input.limit)
-        .orderBy(desc(marketplaceProducts.createdAt));
+      // Use cache for products list (5 minute TTL - frequently changing)
+      const cacheKey = `marketplace:products:${input.category || 'all'}:${input.search || 'all'}:${input.limit}`;
+      return await withCache(
+        cacheKey,
+        async () => {
+          const db = await getDb();
+          if (!db) return [];
+          
+          const conditions = [eq(marketplaceProducts.status, "active")];
+          if (input.category) conditions.push(eq(marketplaceProducts.category, input.category));
+          if (input.search) conditions.push(like(marketplaceProducts.name, `%${input.search}%`));
+          
+          return await db.select().from(marketplaceProducts)
+            .where(and(...conditions))
+            .limit(input.limit)
+            .orderBy(desc(marketplaceProducts.createdAt));
+        },
+        queryTTL.productsList
+      );
     }),
 
   getProduct: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ input }) => {
-      const db = await getDb();
-      if (!db) return null;
-      const result = await db.select().from(marketplaceProducts).where(eq(marketplaceProducts.id, input.id));
-      return result[0] || null;
+      // Use cache for single product (5 minute TTL)
+      return await withCache(
+        cacheKeys.product(input.id.toString()),
+        async () => {
+          const db = await getDb();
+          if (!db) return null;
+return await db.select().from(marketplaceProducts).where(eq(marketplaceProducts.id, input.id));
+        },
+        queryTTL.productDetail
+      );
     }),
 
   createProduct: protectedProcedure
@@ -136,11 +153,12 @@ export const marketplaceRouter = router({
         }));
         await db.insert(marketplaceProductImages).values(imageValues);
       }
-      
-      return result;
+      // Invalidate cache after creating product
+      await invalidateCache(cacheKeys.products());
+      return result[0];
     }),
 
-  updateProduct: protectedProcedure
+  deleteProduct: protectedProcedure
     .input(z.object({
       id: z.number(),
       name: z.string().optional(),

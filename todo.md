@@ -6214,11 +6214,15 @@ All components are integrated into the Financial Management Dashboard and tested
 - [x] Create Redis caching tests (17 tests passing)
 - [x] Create Sentry monitoring tests (27 tests passing)
 - [x] Create comprehensive integration guide (REDIS_SENTRY_INTEGRATION_GUIDE.md)
-- [ ] Add caching to farm.list procedure
-- [ ] Add caching to crops.list procedure
-- [ ] Add caching to animals.list procedure
-- [ ] Add caching to marketplace.getProducts procedure
-- [ ] Add caching to weather procedures
-- [ ] Test caching with load testing
+- [x] Add caching to farm.list procedure
+- [x] Add caching to crops.list procedure
+- [x] Add caching to animals.list procedure
+- [x] Add caching to marketplace.listProducts procedure
+- [x] Add cache invalidation on mutations (create, update, delete)
+- [x] Configure Sentry DSN in production environment
+- [x] Configure Redis URL in production environment
+- [x] Create Sentry DSN validation tests (6 tests passing)
+- [x] Create comprehensive load test script
+- [ ] Run load testing with caching enabled
 - [ ] Verify response time reduction (target: <200ms)
-- [ ] Deploy to production and monitor
+- [ ] Deploy to production and monitor real-time errors
