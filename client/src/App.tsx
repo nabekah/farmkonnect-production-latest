@@ -1083,10 +1083,19 @@ function AppContent() {
 
   // Initialize theme on app load
   useEffect(() => {
-    import('@/services/themeService').then(({ initializeTheme }) => {
-      initializeTheme();
-    });
+    const initTheme = async () => {
+      try {
+        const { initializeTheme } = await import('@/services/themeService');
+        initializeTheme();
+      } catch (error) {
+        console.error('Failed to initialize theme:', error);
+      }
+    };
+    initTheme();
   }, []);
+
+  // Prevent infinite re-renders by memoizing WebSocket hook
+  const wsStatus = useWebSocket();
 
   return (
     <ErrorBoundary>
