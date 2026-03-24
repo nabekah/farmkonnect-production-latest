@@ -12,6 +12,8 @@ import { createContext } from "./context";
 let setupVite: ((app: express.Express, server: any) => Promise<void>) | null = null;
 let serveStatic: ((app: express.Express) => void) | null = null;
 import { initializeWebSocketServer } from "./websocket";
+import { initializeRedis, closeRedis } from "./redis";
+import { initializeSentry, sentryRequestHandler, sentryErrorHandler, flushSentry } from "./sentry";
 
 // Optional cron imports - wrapped in try/catch for Railway compatibility
 let initializeWeatherCron: (() => void) | null = null;
@@ -104,8 +106,17 @@ function performanceHeaders(req: express.Request, res: express.Response, next: e
 }
 
 async function startServer() {
+  // Initialize Sentry for error monitoring
+  initializeSentry();
+  
+  // Initialize Redis for caching
+  initializeRedis();
+  
   const app = express();
   const server = createServer(app);
+  
+  // Add Sentry request handler
+  app.use(sentryRequestHandler());
   
   // Enable compression
   app.use(compression({
@@ -139,6 +150,9 @@ async function startServer() {
     })
   );
 
+  // Add Sentry error handler
+  app.use(sentryErrorHandler());
+  
   // Global error handling
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error('[Error Handler]', err);
@@ -212,5 +226,28 @@ async function startServer() {
     }
   });
 }
+
+// Graceful shutdown handlers
+process.on('SIGTERM', async () => {
+  console.log('SIGTERM received, shutting down gracefully...');
+  try {
+    await flushSentry();
+    await closeRedis();
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+  }
+  process.exit(0);
+});
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully...');
+  try {
+    await flushSentry();
+    await closeRedis();
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+  }
+  process.exit(0);
+});
 
 startServer().catch(console.error);

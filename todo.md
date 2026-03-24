@@ -6197,3 +6197,28 @@ All components are integrated into the Financial Management Dashboard and tested
 - [ ] Test marketplace operations
 - [ ] Test weather alerts
 - [ ] Test analytics reporting
+
+
+## Performance Optimization - Redis Caching & Sentry Monitoring (COMPLETED)
+- [x] Install Redis client package (redis, ioredis)
+- [x] Create Redis connection utility in server/_core/redis.ts
+- [x] Implement cache key generation helpers
+- [x] Create cache invalidation strategy
+- [x] Create cache middleware with TTL configuration
+- [x] Create logger utility for consistent logging
+- [x] Install Sentry SDK (@sentry/node, @sentry/integrations, @sentry/profiling-node)
+- [x] Initialize Sentry in server startup with graceful error handling
+- [x] Add Sentry error tracking middleware to Express
+- [x] Add Sentry performance monitoring
+- [x] Create Sentry error dashboard configuration
+- [x] Create Redis caching tests (17 tests passing)
+- [x] Create Sentry monitoring tests (27 tests passing)
+- [x] Create comprehensive integration guide (REDIS_SENTRY_INTEGRATION_GUIDE.md)
+- [ ] Add caching to farm.list procedure
+- [ ] Add caching to crops.list procedure
+- [ ] Add caching to animals.list procedure
+- [ ] Add caching to marketplace.getProducts procedure
+- [ ] Add caching to weather procedures
+- [ ] Test caching with load testing
+- [ ] Verify response time reduction (target: <200ms)
+- [ ] Deploy to production and monitor
