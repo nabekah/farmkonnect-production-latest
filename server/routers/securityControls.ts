@@ -2,7 +2,6 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
-import { sql } from "drizzle-orm";
 
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
   const R = 6371000; // Earth's radius in meters
@@ -32,8 +31,11 @@ export const securityControlsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is admin or manager
-        const userRole = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const userRole = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!userRole || userRole.length === 0 || !["admin", "manager"].includes(userRole[0].role)) {
           throw new TRPCError({
@@ -42,9 +44,12 @@ export const securityControlsRouter = router({
           });
         }
 
-        await db.execute(sql`INSERT INTO ip_whitelist (userId, farmId, ipAddress, description)
-           VALUES (${ctx.user.id}}, ${parseInt(input.farmId)}}, ${input.ipAddress}}, ${input.description || null}})
-           ON DUPLICATE KEY UPDATE description = VALUES(description), updatedAt = NOW()`);
+        await db.query.raw(
+          `INSERT INTO ip_whitelist (userId, farmId, ipAddress, description)
+           VALUES (?, ?, ?, ?)
+           ON DUPLICATE KEY UPDATE description = VALUES(description), updatedAt = NOW()`,
+          [ctx.user.id, parseInt(input.farmId), input.ipAddress, input.description || null]
+        );
 
         return { success: true, message: "IP added to whitelist" };
       } catch (error) {
@@ -65,10 +70,13 @@ export const securityControlsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const ips = await db.execute(sql`SELECT id, ipAddress, description, isActive, lastUsedAt
+        const ips = await db.query.raw(
+          `SELECT id, ipAddress, description, isActive, lastUsedAt
            FROM ip_whitelist
-           WHERE userId = ${ctx.user.id}} AND farmId = ${parseInt(input.farmId)}}
-           ORDER BY createdAt DESC`);
+           WHERE userId = ? AND farmId = ?
+           ORDER BY createdAt DESC`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         return ips || [];
       } catch (error) {
@@ -88,7 +96,10 @@ export const securityControlsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        await db.execute(sql`DELETE FROM ip_whitelist WHERE id = ${input.ipId}} AND userId = ${ctx.user.id}}`);
+        await db.query.raw(
+          `DELETE FROM ip_whitelist WHERE id = ? AND userId = ?`,
+          [input.ipId, ctx.user.id]
+        );
 
         return { success: true, message: "IP removed from whitelist" };
       } catch (error) {
@@ -116,8 +127,11 @@ export const securityControlsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is admin or manager
-        const userRole = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const userRole = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!userRole || userRole.length === 0 || !["admin", "manager"].includes(userRole[0].role)) {
           throw new TRPCError({
@@ -126,8 +140,11 @@ export const securityControlsRouter = router({
           });
         }
 
-        await db.execute(sql`INSERT INTO geofence_zones (userId, farmId, zoneName, latitude, longitude, radiusMeters, alertOnExit)
-           VALUES (${ctx.user.id}}, ${parseInt(input.farmId)}}, ${input.zoneName}}, ${input.latitude}}, ${input.longitude}}, ${input.radiusMeters}}, ${input.alertOnExit}})`);
+        await db.query.raw(
+          `INSERT INTO geofence_zones (userId, farmId, zoneName, latitude, longitude, radiusMeters, alertOnExit)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [ctx.user.id, parseInt(input.farmId), input.zoneName, input.latitude, input.longitude, input.radiusMeters, input.alertOnExit]
+        );
 
         return { success: true, message: "Geofence created successfully" };
       } catch (error) {
@@ -148,10 +165,13 @@ export const securityControlsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const geofences = await db.execute(sql`SELECT id, zoneName, latitude, longitude, radiusMeters, isActive, alertOnExit
+        const geofences = await db.query.raw(
+          `SELECT id, zoneName, latitude, longitude, radiusMeters, isActive, alertOnExit
            FROM geofence_zones
-           WHERE userId = ${ctx.user.id}} AND farmId = ${parseInt(input.farmId)}}
-           ORDER BY createdAt DESC`);
+           WHERE userId = ? AND farmId = ?
+           ORDER BY createdAt DESC`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         return geofences || [];
       } catch (error) {
@@ -175,9 +195,12 @@ export const securityControlsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const geofences = await db.execute(sql`SELECT id, zoneName, latitude, longitude, radiusMeters, alertOnExit
+        const geofences = await db.query.raw(
+          `SELECT id, zoneName, latitude, longitude, radiusMeters, alertOnExit
            FROM geofence_zones
-           WHERE farmId = ${parseInt(input.farmId)}} AND isActive = TRUE`);
+           WHERE farmId = ? AND isActive = TRUE`,
+          [parseInt(input.farmId)]
+        );
 
         const status = geofences?.map((zone: any) => {
           const distance = calculateDistance(
@@ -217,15 +240,21 @@ export const securityControlsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const whitelisted = await db.execute(sql`SELECT id FROM ip_whitelist
-           WHERE farmId = ${parseInt(input.farmId)}} AND ipAddress = ${input.ipAddress}} AND isActive = TRUE`);
+        const whitelisted = await db.query.raw(
+          `SELECT id FROM ip_whitelist
+           WHERE farmId = ? AND ipAddress = ? AND isActive = TRUE`,
+          [parseInt(input.farmId), input.ipAddress]
+        );
 
         if (!whitelisted || whitelisted.length === 0) {
           return { allowed: false, message: "IP address not whitelisted" };
         }
 
         // Update last used timestamp
-        await db.execute(sql`UPDATE ip_whitelist SET lastUsedAt = NOW() WHERE id = ${whitelisted[0].id}}`);
+        await db.query.raw(
+          `UPDATE ip_whitelist SET lastUsedAt = NOW() WHERE id = ?`,
+          [whitelisted[0].id]
+        );
 
         return { allowed: true, message: "IP address is whitelisted" };
       } catch (error) {

@@ -2,7 +2,6 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
-import { sql } from "drizzle-orm";
 
 export const incidentPlaybooksRouter = router({
   // Create incident playbook
@@ -37,8 +36,11 @@ export const incidentPlaybooksRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is admin
-        const isAdmin = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.role = 'admin'`);
+        const isAdmin = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.role = 'admin'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!isAdmin || isAdmin.length === 0) {
           throw new TRPCError({
@@ -47,9 +49,23 @@ export const incidentPlaybooksRouter = router({
           });
         }
 
-        await db.execute(sql`INSERT INTO incident_playbooks 
+        await db.query.raw(
+          `INSERT INTO incident_playbooks 
            (farmId, playbookName, description, incidentType, severity, triggerConditions, responseSteps, escalationLevels, notificationRecipients, createdBy)
-           VALUES (${parseInt(input.farmId)}}, ${input.playbookName}}, ${input.description || null}}, ${input.incidentType}}, ${input.severity}}, ${JSON.stringify(input.triggerConditions)}}, ${JSON.stringify(input.responseSteps)}}, ${JSON.stringify(input.escalationLevels)}}, ${JSON.stringify(input.notificationRecipients)}}, ${ctx.user.id}})`);
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            parseInt(input.farmId),
+            input.playbookName,
+            input.description || null,
+            input.incidentType,
+            input.severity,
+            JSON.stringify(input.triggerConditions),
+            JSON.stringify(input.responseSteps),
+            JSON.stringify(input.escalationLevels),
+            JSON.stringify(input.notificationRecipients),
+            ctx.user.id
+          ]
+        );
 
         return { success: true, message: "Playbook created successfully" };
       } catch (error) {
@@ -70,10 +86,13 @@ export const incidentPlaybooksRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const playbooks = await db.execute(sql`SELECT id, playbookName, description, incidentType, severity, isActive, createdAt
+        const playbooks = await db.query.raw(
+          `SELECT id, playbookName, description, incidentType, severity, isActive, createdAt
            FROM incident_playbooks
-           WHERE farmId = ${parseInt(input.farmId)}}
-           ORDER BY createdAt DESC`);
+           WHERE farmId = ?
+           ORDER BY createdAt DESC`,
+          [parseInt(input.farmId)]
+        );
 
         return playbooks || [];
       } catch (error) {
@@ -100,7 +119,10 @@ export const incidentPlaybooksRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Get playbook details
-        const playbook = await db.execute(sql`SELECT id, escalationLevels, notificationRecipients, responseSteps FROM incident_playbooks WHERE id = ${input.playbookId}} AND farmId = ${parseInt(input.farmId)}}`);
+        const playbook = await db.query.raw(
+          `SELECT id, escalationLevels, notificationRecipients, responseSteps FROM incident_playbooks WHERE id = ? AND farmId = ?`,
+          [input.playbookId, parseInt(input.farmId)]
+        );
 
         if (!playbook || playbook.length === 0) {
           throw new TRPCError({
@@ -110,9 +132,20 @@ export const incidentPlaybooksRouter = router({
         }
 
         // Create incident response record
-        const result = await db.execute(sql`INSERT INTO incident_responses 
+        const result = await db.query.raw(
+          `INSERT INTO incident_responses 
            (farmId, playbookId, incidentType, severity, triggerReason, status, currentEscalationLevel)
-           VALUES (${parseInt(input.farmId)}}, ${input.playbookId}}, ${input.incidentType}}, ${input.severity}}, ${input.triggerReason}}, ${"triggered"}}, ${1}})`);
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            parseInt(input.farmId),
+            input.playbookId,
+            input.incidentType,
+            input.severity,
+            input.triggerReason,
+            "triggered",
+            1
+          ]
+        );
 
         const escalationLevels = JSON.parse(playbook[0].escalationLevels || "[]");
         const notificationRecipients = JSON.parse(playbook[0].notificationRecipients || "[]");
@@ -129,8 +162,18 @@ export const incidentPlaybooksRouter = router({
         }
 
         // Log incident
-        await db.execute(sql`INSERT INTO compliance_logs (userId, farmId, eventType, eventCategory, description, severity)
-           VALUES (${ctx.user.id}}, ${parseInt(input.farmId)}}, ${"incident_triggered"}}, ${"incident"}}, ${`Incident triggered: ${input.incidentType} - ${input.triggerReason}`}}, ${input.severity}})`);
+        await db.query.raw(
+          `INSERT INTO compliance_logs (userId, farmId, eventType, eventCategory, description, severity)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.user.id,
+            parseInt(input.farmId),
+            "incident_triggered",
+            "incident",
+            `Incident triggered: ${input.incidentType} - ${input.triggerReason}`,
+            input.severity
+          ]
+        );
 
         return {
           success: true,
@@ -161,9 +204,12 @@ export const incidentPlaybooksRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Get incident details
-        const incident = await db.execute(sql`SELECT ir.*, ip.escalationLevels FROM incident_responses ir
+        const incident = await db.query.raw(
+          `SELECT ir.*, ip.escalationLevels FROM incident_responses ir
            JOIN incident_playbooks ip ON ir.playbookId = ip.id
-           WHERE ir.id = ${input.incidentId}}`);
+           WHERE ir.id = ?`,
+          [input.incidentId]
+        );
 
         if (!incident || incident.length === 0) {
           throw new TRPCError({
@@ -184,17 +230,28 @@ export const incidentPlaybooksRouter = router({
         }
 
         // Update incident status
-        const status = nextLevel === escalationLevels.length ? "escalated" : "in_progress";
-        await db.execute(sql`UPDATE incident_responses 
-           SET status = ${status}, currentEscalationLevel = ${nextLevel}, updatedAt = NOW()
-           WHERE id = ${input.incidentId}`);
+        await db.query.raw(
+          `UPDATE incident_responses 
+           SET status = ?, currentEscalationLevel = ?, updatedAt = NOW()
+           WHERE id = ?`,
+          [nextLevel === escalationLevels.length ? "escalated" : "in_progress", nextLevel, input.incidentId]
+        );
 
         // Get next escalation level details
         const nextEscalation = escalationLevels[nextLevel - 1];
 
         // Log escalation
-        await db.execute(sql`INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
-           VALUES (${ctx.user.id}}, ${"incident_escalated"}}, ${"incident"}}, ${`Incident escalated to level ${nextLevel}: ${escalationReason}`}}, ${"high"}})`);
+        await db.query.raw(
+          `INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            ctx.user.id,
+            "incident_escalated",
+            "incident",
+            `Incident escalated to level ${nextLevel}: ${escalationReason}`,
+            "high"
+          ]
+        );
 
         return {
           success: true,
@@ -223,13 +280,25 @@ export const incidentPlaybooksRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        await db.execute(sql`UPDATE incident_responses 
-           SET status = ${"resolved"}}, resolvedAt = NOW(), updatedAt = NOW()
-           WHERE id = ${input.incidentId}}`);
+        await db.query.raw(
+          `UPDATE incident_responses 
+           SET status = ?, resolvedAt = NOW(), updatedAt = NOW()
+           WHERE id = ?`,
+          ["resolved", input.incidentId]
+        );
 
         // Log resolution
-        await db.execute(sql`INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
-           VALUES (${ctx.user.id}}, ${"incident_resolved"}}, ${"incident"}}, ${`Incident resolved: ${input.resolutionNotes}`}}, ${"low"}})`);
+        await db.query.raw(
+          `INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
+           VALUES (?, ?, ?, ?, ?)`,
+          [
+            ctx.user.id,
+            "incident_resolved",
+            "incident",
+            `Incident resolved: ${input.resolutionNotes}`,
+            "low"
+          ]
+        );
 
         return { success: true, message: "Incident resolved successfully" };
       } catch (error) {
@@ -249,10 +318,13 @@ export const incidentPlaybooksRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const incidents = await db.execute(sql`SELECT ir.*, ip.playbookName FROM incident_responses ir
+        const incidents = await db.query.raw(
+          `SELECT ir.*, ip.playbookName FROM incident_responses ir
            JOIN incident_playbooks ip ON ir.playbookId = ip.id
-           WHERE ir.farmId = ${parseInt(input.farmId)}} AND ir.status IN ('triggered', 'in_progress', 'escalated')
-           ORDER BY ir.severity DESC, ir.createdAt DESC`);
+           WHERE ir.farmId = ? AND ir.status IN ('triggered', 'in_progress', 'escalated')
+           ORDER BY ir.severity DESC, ir.createdAt DESC`,
+          [parseInt(input.farmId)]
+        );
 
         return incidents || [];
       } catch (error) {

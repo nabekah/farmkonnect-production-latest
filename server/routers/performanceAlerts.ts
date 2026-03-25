@@ -2,7 +2,6 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
-import { sql } from "drizzle-orm";
 
 export const performanceAlertsRouter = router({
   // Get alerts for a user
@@ -18,31 +17,24 @@ export const performanceAlertsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        // Build dynamic query using Drizzle ORM
-        let whereConditions = [sql`userId = ${ctx.user.id}`];
-        
+        let query = `SELECT id, alertType, severity, message, isRead, createdAt
+                     FROM performance_alerts
+                     WHERE userId = ?`;
+        const params: any[] = [ctx.user.id];
+
         if (input.farmId) {
-          whereConditions.push(sql`farmId = ${parseInt(input.farmId)}`);
+          query += ` AND farmId = ?`;
+          params.push(parseInt(input.farmId));
         }
-        
+
         if (input.unreadOnly) {
-          whereConditions.push(sql`isRead = FALSE`);
+          query += ` AND isRead = FALSE`;
         }
-        
-        const whereClause = whereConditions.length > 0 
-          ? sql`WHERE ${whereConditions.reduce((acc, cond, i) => 
-              i === 0 ? cond : sql`${acc} AND ${cond}`
-            )}`
-          : sql``;
-        
-        const alerts = await db.execute(sql`
-          SELECT id, alertType, severity, message, isRead, createdAt
-          FROM performance_alerts
-          ${whereClause}
-          ORDER BY createdAt DESC
-          LIMIT ${input.limit}
-          OFFSET ${input.offset}
-        `);
+
+        query += ` ORDER BY createdAt DESC LIMIT ? OFFSET ?`;
+        params.push(input.limit, input.offset);
+
+        const alerts = await db.query.raw(query, params);
         return alerts || [];
       } catch (error) {
         console.error("Error fetching alerts:", error);
@@ -66,8 +58,11 @@ export const performanceAlertsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access to the farm
-        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const hasAccess = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -76,11 +71,14 @@ export const performanceAlertsRouter = router({
           });
         }
 
-        const alerts = await db.execute(sql`SELECT id, alertType, severity, message, isRead, createdAt, actionTaken
+        const alerts = await db.query.raw(
+          `SELECT id, alertType, severity, message, isRead, createdAt, actionTaken
            FROM performance_alerts
-           WHERE userId = ${input.userId}} AND farmId = ${parseInt(input.farmId)}}
+           WHERE userId = ? AND farmId = ?
            ORDER BY createdAt DESC
-           LIMIT ${input.limit}}`);
+           LIMIT ?`,
+          [input.userId, parseInt(input.farmId), input.limit]
+        );
 
         return alerts || [];
       } catch (error) {
@@ -102,7 +100,10 @@ export const performanceAlertsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify alert belongs to user
-        const alert = await db.execute(sql`SELECT userId FROM performance_alerts WHERE id = ${input.alertId}}`);
+        const alert = await db.query.raw(
+          `SELECT userId FROM performance_alerts WHERE id = ?`,
+          [input.alertId]
+        );
 
         if (!alert || alert.length === 0 || alert[0].userId !== ctx.user.id) {
           throw new TRPCError({
@@ -111,7 +112,10 @@ export const performanceAlertsRouter = router({
           });
         }
 
-        await db.execute(sql`UPDATE performance_alerts SET isRead = TRUE, readAt = NOW() WHERE id = ${input.alertId}}`);
+        await db.query.raw(
+          `UPDATE performance_alerts SET isRead = TRUE, readAt = NOW() WHERE id = ?`,
+          [input.alertId]
+        );
 
         return { success: true };
       } catch (error) {
@@ -139,8 +143,11 @@ export const performanceAlertsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is manager or admin
-        const userRole = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const userRole = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!userRole || userRole.length === 0 || !["manager", "admin"].includes(userRole[0].role)) {
           throw new TRPCError({
@@ -150,9 +157,12 @@ export const performanceAlertsRouter = router({
         }
 
         // Check if similar alert already exists (avoid duplicates)
-        const existing = await db.execute(sql`SELECT id FROM performance_alerts
-           WHERE userId = ${input.userId}} AND farmId = ${parseInt(input.farmId)}} AND alertType = ${input.alertType}} AND isRead = FALSE
-           AND createdAt > DATE_SUB(NOW(), INTERVAL 1 HOUR)`);
+        const existing = await db.query.raw(
+          `SELECT id FROM performance_alerts
+           WHERE userId = ? AND farmId = ? AND alertType = ? AND isRead = FALSE
+           AND createdAt > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+          [input.userId, parseInt(input.farmId), input.alertType]
+        );
 
         if (existing && existing.length > 0) {
           return {
@@ -161,8 +171,11 @@ export const performanceAlertsRouter = router({
           };
         }
 
-        await db.execute(sql`INSERT INTO performance_alerts (userId, farmId, alertType, severity, message)
-           VALUES (${input.userId}}, ${parseInt(input.farmId)}}, ${input.alertType}}, ${input.severity}}, ${input.message}})`);
+        await db.query.raw(
+          `INSERT INTO performance_alerts (userId, farmId, alertType, severity, message)
+           VALUES (?, ?, ?, ?, ?)`,
+          [input.userId, parseInt(input.farmId), input.alertType, input.severity, input.message]
+        );
 
         return {
           success: true,
@@ -187,8 +200,11 @@ export const performanceAlertsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access
-        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const hasAccess = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -197,7 +213,8 @@ export const performanceAlertsRouter = router({
           });
         }
 
-        const summary = await db.execute(sql`SELECT 
+        const summary = await db.query.raw(
+          `SELECT 
              COUNT(*) as totalAlerts,
              SUM(CASE WHEN isRead = FALSE THEN 1 ELSE 0 END) as unreadAlerts,
              SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as criticalAlerts,
@@ -205,7 +222,9 @@ export const performanceAlertsRouter = router({
              SUM(CASE WHEN severity = 'medium' THEN 1 ELSE 0 END) as mediumAlerts,
              SUM(CASE WHEN severity = 'low' THEN 1 ELSE 0 END) as lowAlerts
            FROM performance_alerts
-           WHERE farmId = ${parseInt(input.farmId)}} AND createdAt > DATE_SUB(NOW(), INTERVAL 30 DAY)`);
+           WHERE farmId = ? AND createdAt > DATE_SUB(NOW(), INTERVAL 30 DAY)`,
+          [parseInt(input.farmId)]
+        );
 
         return summary?.[0] || {
           totalAlerts: 0,

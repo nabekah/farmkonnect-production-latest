@@ -3,7 +3,6 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
 import crypto from "crypto";
-import { sql } from "drizzle-orm";
 
 const generateDeviceHash = (deviceInfo: {
   userAgent: string;
@@ -40,11 +39,17 @@ export const deviceFingerprintingRouter = router({
         });
 
         // Check if device already exists
-        const existingDevice = await db.execute(sql`SELECT id, isVerified FROM device_fingerprints WHERE deviceHash = ${deviceHash}} AND userId = ${ctx.user.id}} AND farmId = ${parseInt(input.farmId)}}`);
+        const existingDevice = await db.query.raw(
+          `SELECT id, isVerified FROM device_fingerprints WHERE deviceHash = ? AND userId = ? AND farmId = ?`,
+          [deviceHash, ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (existingDevice && existingDevice.length > 0) {
           // Update last seen
-          await db.execute(sql`UPDATE device_fingerprints SET lastSeenAt = NOW() WHERE id = ${existingDevice[0].id}}`);
+          await db.query.raw(
+            `UPDATE device_fingerprints SET lastSeenAt = NOW() WHERE id = ?`,
+            [existingDevice[0].id]
+          );
           return {
             success: true,
             isNewDevice: false,
@@ -54,12 +59,18 @@ export const deviceFingerprintingRouter = router({
         }
 
         // Register new device
-        await db.execute(sql`INSERT INTO device_fingerprints (userId, farmId, deviceHash, deviceName, browserType, osType, ipAddress, userAgent)
-           VALUES (${ctx.user.id}}, ${parseInt(input.farmId)}}, ${deviceHash}}, ${input.deviceName}}, ${input.browserType}}, ${input.osType}}, ${input.ipAddress}}, ${input.userAgent}})`);
+        await db.query.raw(
+          `INSERT INTO device_fingerprints (userId, farmId, deviceHash, deviceName, browserType, osType, ipAddress, userAgent)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [ctx.user.id, parseInt(input.farmId), deviceHash, input.deviceName, input.browserType, input.osType, input.ipAddress, input.userAgent]
+        );
 
         // Log security event
-        await db.execute(sql`INSERT INTO compliance_logs (userId, farmId, eventType, eventCategory, description, severity)
-           VALUES (${ctx.user.id}}, ${parseInt(input.farmId)}}, ${"new_device_detected"}}, ${"security"}}, ${`New device registered: ${input.deviceName}`}}, ${"low"}})`);
+        await db.query.raw(
+          `INSERT INTO compliance_logs (userId, farmId, eventType, eventCategory, description, severity)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [ctx.user.id, parseInt(input.farmId), "new_device_detected", "security", `New device registered: ${input.deviceName}`, "low"]
+        );
 
         return {
           success: true,
@@ -85,10 +96,13 @@ export const deviceFingerprintingRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const devices = await db.execute(sql`SELECT id, deviceName, browserType, osType, ipAddress, isVerified, lastSeenAt, createdAt
+        const devices = await db.query.raw(
+          `SELECT id, deviceName, browserType, osType, ipAddress, isVerified, lastSeenAt, createdAt
            FROM device_fingerprints
-           WHERE userId = ${ctx.user.id}} AND farmId = ${parseInt(input.farmId)}}
-           ORDER BY lastSeenAt DESC`);
+           WHERE userId = ? AND farmId = ?
+           ORDER BY lastSeenAt DESC`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         return devices || [];
       } catch (error) {
@@ -112,7 +126,10 @@ export const deviceFingerprintingRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify device belongs to user
-        const device = await db.execute(sql`SELECT id, userId FROM device_fingerprints WHERE id = ${input.deviceId}}`);
+        const device = await db.query.raw(
+          `SELECT id, userId FROM device_fingerprints WHERE id = ?`,
+          [input.deviceId]
+        );
 
         if (!device || device.length === 0 || device[0].userId !== ctx.user.id) {
           throw new TRPCError({
@@ -121,11 +138,17 @@ export const deviceFingerprintingRouter = router({
           });
         }
 
-        await db.execute(sql`UPDATE device_fingerprints SET isVerified = TRUE WHERE id = ${input.deviceId}}`);
+        await db.query.raw(
+          `UPDATE device_fingerprints SET isVerified = TRUE WHERE id = ?`,
+          [input.deviceId]
+        );
 
         // Log verification event
-        await db.execute(sql`INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
-           VALUES (${ctx.user.id}}, ${"device_verified"}}, ${"security"}}, ${"Device verified and trusted"}}, ${"low"}})`);
+        await db.query.raw(
+          `INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
+           VALUES (?, ?, ?, ?, ?)`,
+          [ctx.user.id, "device_verified", "security", "Device verified and trusted", "low"]
+        );
 
         return { success: true, message: "Device verified successfully" };
       } catch (error) {
@@ -147,7 +170,10 @@ export const deviceFingerprintingRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify device belongs to user
-        const device = await db.execute(sql`SELECT userId FROM device_fingerprints WHERE id = ${input.deviceId}}`);
+        const device = await db.query.raw(
+          `SELECT userId FROM device_fingerprints WHERE id = ?`,
+          [input.deviceId]
+        );
 
         if (!device || device.length === 0 || device[0].userId !== ctx.user.id) {
           throw new TRPCError({
@@ -156,11 +182,17 @@ export const deviceFingerprintingRouter = router({
           });
         }
 
-        await db.execute(sql`DELETE FROM device_fingerprints WHERE id = ${input.deviceId}}`);
+        await db.query.raw(
+          `DELETE FROM device_fingerprints WHERE id = ?`,
+          [input.deviceId]
+        );
 
         // Log removal event
-        await db.execute(sql`INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
-           VALUES (${ctx.user.id}}, ${"device_removed"}}, ${"security"}}, ${"Device removed from trusted list"}}, ${"low"}})`);
+        await db.query.raw(
+          `INSERT INTO compliance_logs (userId, eventType, eventCategory, description, severity)
+           VALUES (?, ?, ?, ?, ?)`,
+          [ctx.user.id, "device_removed", "security", "Device removed from trusted list", "low"]
+        );
 
         return { success: true, message: "Device removed successfully" };
       } catch (error) {
@@ -187,8 +219,11 @@ export const deviceFingerprintingRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Check if device is known and verified
-        const device = await db.execute(sql`SELECT id, isVerified, ipAddress FROM device_fingerprints 
-           WHERE deviceHash = ${input.deviceHash}} AND userId = ${ctx.user.id}} AND farmId = ${parseInt(input.farmId)}}`);
+        const device = await db.query.raw(
+          `SELECT id, isVerified, ipAddress FROM device_fingerprints 
+           WHERE deviceHash = ? AND userId = ? AND farmId = ?`,
+          [input.deviceHash, ctx.user.id, parseInt(input.farmId)]
+        );
 
         const suspiciousFlags: string[] = [];
         let riskScore = 0;
@@ -218,8 +253,11 @@ export const deviceFingerprintingRouter = router({
         }
 
         // Check for multiple failed logins
-        const recentFailedLogins = await db.execute(sql`SELECT COUNT(*) as count FROM compliance_logs
-           WHERE userId = ${ctx.user.id}} AND eventType = 'failed_login' AND createdAt > DATE_SUB(NOW(), INTERVAL 1 HOUR)`);
+        const recentFailedLogins = await db.query.raw(
+          `SELECT COUNT(*) as count FROM compliance_logs
+           WHERE userId = ? AND eventType = 'failed_login' AND createdAt > DATE_SUB(NOW(), INTERVAL 1 HOUR)`,
+          [ctx.user.id]
+        );
 
         if (recentFailedLogins && recentFailedLogins[0]?.count > 3) {
           suspiciousFlags.push("Multiple failed login attempts");

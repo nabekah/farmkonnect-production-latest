@@ -2,7 +2,6 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
-import { sql } from "drizzle-orm";
 
 export const complianceReportsRouter = router({
   // Generate ISO 27001 compliance report
@@ -19,8 +18,11 @@ export const complianceReportsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is admin
-        const isAdmin = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.role = 'admin'`);
+        const isAdmin = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.role = 'admin'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!isAdmin || isAdmin.length === 0) {
           throw new TRPCError({
@@ -43,16 +45,25 @@ export const complianceReportsRouter = router({
 
         // Access Control Report
         if (["access_control", "full"].includes(input.reportType)) {
-          const accessEvents = await db.execute(sql`SELECT eventType, COUNT(*) as count
+          const accessEvents = await db.query.raw(
+            `SELECT eventType, COUNT(*) as count
              FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND eventCategory = 'access' AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}
-             GROUP BY eventType`);
+             WHERE farmId = ? AND eventCategory = 'access' AND createdAt BETWEEN ? AND ?
+             GROUP BY eventType`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
-          const failedLogins = await db.execute(sql`SELECT COUNT(*) as count FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND eventType = 'failed_login' AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}`);
+          const failedLogins = await db.query.raw(
+            `SELECT COUNT(*) as count FROM compliance_logs
+             WHERE farmId = ? AND eventType = 'failed_login' AND createdAt BETWEEN ? AND ?`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
-          const mfaUsage = await db.execute(sql`SELECT COUNT(*) as count FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND eventType = 'mfa_verified' AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}`);
+          const mfaUsage = await db.query.raw(
+            `SELECT COUNT(*) as count FROM compliance_logs
+             WHERE farmId = ? AND eventType = 'mfa_verified' AND createdAt BETWEEN ? AND ?`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
           reportData.sections.accessControl = {
             iso27001Section: "A.9 Access Control",
@@ -69,15 +80,21 @@ export const complianceReportsRouter = router({
 
         // Data Protection Report
         if (["data_protection", "full"].includes(input.reportType)) {
-          const dataAccess = await db.execute(sql`SELECT eventType, COUNT(*) as count
+          const dataAccess = await db.query.raw(
+            `SELECT eventType, COUNT(*) as count
              FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND eventCategory = 'data_access' AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}
-             GROUP BY eventType`);
+             WHERE farmId = ? AND eventCategory = 'data_access' AND createdAt BETWEEN ? AND ?
+             GROUP BY eventType`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
-          const dataModifications = await db.execute(sql`SELECT eventType, COUNT(*) as count
+          const dataModifications = await db.query.raw(
+            `SELECT eventType, COUNT(*) as count
              FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND eventCategory = 'data_modification' AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}
-             GROUP BY eventType`);
+             WHERE farmId = ? AND eventCategory = 'data_modification' AND createdAt BETWEEN ? AND ?
+             GROUP BY eventType`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
           reportData.sections.dataProtection = {
             iso27001Section: "A.10 Cryptography & Data Protection",
@@ -90,13 +107,19 @@ export const complianceReportsRouter = router({
 
         // Incident Response Report
         if (["incident_response", "full"].includes(input.reportType)) {
-          const incidents = await db.execute(sql`SELECT severity, COUNT(*) as count
+          const incidents = await db.query.raw(
+            `SELECT severity, COUNT(*) as count
              FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND eventCategory = 'incident' AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}
-             GROUP BY severity`);
+             WHERE farmId = ? AND eventCategory = 'incident' AND createdAt BETWEEN ? AND ?
+             GROUP BY severity`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
-          const criticalIncidents = await db.execute(sql`SELECT COUNT(*) as count FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND severity = 'critical' AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}`);
+          const criticalIncidents = await db.query.raw(
+            `SELECT COUNT(*) as count FROM compliance_logs
+             WHERE farmId = ? AND severity = 'critical' AND createdAt BETWEEN ? AND ?`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
           reportData.sections.incidentResponse = {
             iso27001Section: "A.16 Information Security Incident Management",
@@ -109,18 +132,24 @@ export const complianceReportsRouter = router({
 
         // Audit Trail Report
         if (["audit_trail", "full"].includes(input.reportType)) {
-          const auditEvents = await db.execute(sql`SELECT eventType, COUNT(*) as count
+          const auditEvents = await db.query.raw(
+            `SELECT eventType, COUNT(*) as count
              FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}
+             WHERE farmId = ? AND createdAt BETWEEN ? AND ?
              GROUP BY eventType
              ORDER BY count DESC
-             LIMIT 20`);
+             LIMIT 20`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
-          const userActivity = await db.execute(sql`SELECT userId, COUNT(*) as eventCount
+          const userActivity = await db.query.raw(
+            `SELECT userId, COUNT(*) as eventCount
              FROM compliance_logs
-             WHERE farmId = ${parseInt(input.farmId)}} AND createdAt BETWEEN ${input.startDate}} AND ${input.endDate}}
+             WHERE farmId = ? AND createdAt BETWEEN ? AND ?
              GROUP BY userId
-             ORDER BY eventCount DESC`);
+             ORDER BY eventCount DESC`,
+            [parseInt(input.farmId), input.startDate, input.endDate]
+          );
 
           reportData.sections.auditTrail = {
             iso27001Section: "A.12 Operations Security",
@@ -161,8 +190,11 @@ export const complianceReportsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access
-        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const hasAccess = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -173,14 +205,17 @@ export const complianceReportsRouter = router({
 
         const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-        const metrics = await db.execute(sql`SELECT 
+        const metrics = await db.query.raw(
+          `SELECT 
              COUNT(*) as totalEvents,
              SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) as criticalEvents,
              SUM(CASE WHEN severity = 'high' THEN 1 ELSE 0 END) as highEvents,
              SUM(CASE WHEN eventType = 'mfa_verified' THEN 1 ELSE 0 END) as mfaEvents,
              SUM(CASE WHEN eventCategory = 'access' THEN 1 ELSE 0 END) as accessEvents
            FROM compliance_logs
-           WHERE farmId = ${parseInt(input.farmId)}} AND createdAt > ${last30Days}}`);
+           WHERE farmId = ? AND createdAt > ?`,
+          [parseInt(input.farmId), last30Days]
+        );
 
         return {
           period: "Last 30 days",
@@ -218,9 +253,21 @@ export const complianceReportsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        await db.execute(sql`INSERT INTO compliance_logs 
+        await db.query.raw(
+          `INSERT INTO compliance_logs 
            (userId, farmId, eventType, eventCategory, description, severity, complianceControl, iso27001Section)
-           VALUES (${ctx.user.id}}, ${parseInt(input.farmId)}}, ${input.eventType}}, ${input.eventCategory}}, ${input.description}}, ${input.severity}}, ${input.complianceControl || null}}, ${input.iso27001Section || null}})`);
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            ctx.user.id,
+            parseInt(input.farmId),
+            input.eventType,
+            input.eventCategory,
+            input.description,
+            input.severity,
+            input.complianceControl || null,
+            input.iso27001Section || null
+          ]
+        );
 
         return { success: true, message: "Compliance event logged" };
       } catch (error) {

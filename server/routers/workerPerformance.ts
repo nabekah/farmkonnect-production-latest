@@ -2,7 +2,6 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
-import { sql } from "drizzle-orm";
 
 export const workerPerformanceRouter = router({
   // Get worker performance metrics
@@ -14,8 +13,11 @@ export const workerPerformanceRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access to the farm
-        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const hasAccess = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -24,11 +26,14 @@ export const workerPerformanceRouter = router({
           });
         }
 
-        const metrics = await db.execute(sql`SELECT id, userId, farmId, tasksAssigned, tasksCompleted, tasksOverdue,
+        const metrics = await db.query.raw(
+          `SELECT id, userId, farmId, tasksAssigned, tasksCompleted, tasksOverdue,
                   averageCompletionTime, activityScore, lastActivityAt, totalHoursWorked,
                   attendanceRate, qualityScore, createdAt, updatedAt
            FROM worker_performance
-           WHERE userId = ${input.userId}} AND farmId = ${parseInt(input.farmId)}}`);
+           WHERE userId = ? AND farmId = ?`,
+          [input.userId, parseInt(input.farmId)]
+        );
 
         return metrics?.[0] || null;
       } catch (error) {
@@ -50,8 +55,11 @@ export const workerPerformanceRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access to the farm
-        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const hasAccess = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -60,14 +68,17 @@ export const workerPerformanceRouter = router({
           });
         }
 
-        const metrics = await db.execute(sql`SELECT wp.userId, wp.tasksAssigned, wp.tasksCompleted, wp.tasksOverdue,
+        const metrics = await db.query.raw(
+          `SELECT wp.userId, wp.tasksAssigned, wp.tasksCompleted, wp.tasksOverdue,
                   wp.averageCompletionTime, wp.activityScore, wp.lastActivityAt,
                   wp.totalHoursWorked, wp.attendanceRate, wp.qualityScore,
                   fw.role
            FROM worker_performance wp
            JOIN farm_workers fw ON wp.userId = fw.userId AND wp.farmId = fw.farmId
-           WHERE wp.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'
-           ORDER BY wp.activityScore DESC`);
+           WHERE wp.farmId = ? AND fw.status = 'active'
+           ORDER BY wp.activityScore DESC`,
+          [parseInt(input.farmId)]
+        );
 
         return metrics || [];
       } catch (error) {
@@ -101,8 +112,11 @@ export const workerPerformanceRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is manager or owner
-        const userRole = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const userRole = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!userRole || userRole.length === 0 || !["owner", "manager"].includes(userRole[0].role)) {
           throw new TRPCError({
@@ -157,7 +171,7 @@ export const workerPerformanceRouter = router({
         const query = `UPDATE worker_performance SET ${updates.join(", ")}
                        WHERE userId = ? AND farmId = ?`;
 
-        await db.execute(sql`${query}`);
+        await db.query.raw(query, params);
 
         return {
           success: true,
@@ -182,8 +196,11 @@ export const workerPerformanceRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access
-        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
+        const hasAccess = await db.query.raw(
+          `SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
+          [ctx.user.id, parseInt(input.farmId)]
+        );
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -192,7 +209,8 @@ export const workerPerformanceRouter = router({
           });
         }
 
-        const summary = await db.execute(sql`SELECT 
+        const summary = await db.query.raw(
+          `SELECT 
              COUNT(*) as totalWorkers,
              AVG(activityScore) as averageActivityScore,
              AVG(attendanceRate) as averageAttendanceRate,
@@ -201,7 +219,9 @@ export const workerPerformanceRouter = router({
              SUM(tasksOverdue) as totalTasksOverdue,
              SUM(totalHoursWorked) as totalHoursWorked
            FROM worker_performance
-           WHERE farmId = ${parseInt(input.farmId)}}`);
+           WHERE farmId = ?`,
+          [parseInt(input.farmId)]
+        );
 
         return summary?.[0] || {
           totalWorkers: 0,

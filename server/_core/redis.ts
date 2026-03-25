@@ -18,9 +18,6 @@ export function initializeRedis(): Redis {
 
   try {
     redisClient = new Redis(redisUrl, {
-      // Enable dual-stack lookup (IPv4 and IPv6) for Railway legacy environments
-      // Railway environments created before Oct 16, 2025 use IPv6-only private networks
-      family: 0,
       retryStrategy: (times) => {
         if (isProduction && times > 5) {
           logger.warn('Redis: Max retries reached, continuing without cache');

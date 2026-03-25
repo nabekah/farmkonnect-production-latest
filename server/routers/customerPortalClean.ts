@@ -126,7 +126,7 @@ export const customerPortalCleanRouter = router({
           originalPrice: 50,
           discount: 10,
           rating: 4.8,
-          reviewCount: 156,
+          reviews: 156,
           inStock: 120,
           description: "Fresh organic tomatoes harvested daily from our sustainable farm",
           longDescription:
