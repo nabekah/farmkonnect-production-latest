@@ -158,7 +158,7 @@ return await db.select().from(marketplaceProducts).where(eq(marketplaceProducts.
       return result[0];
     }),
 
-  deleteProduct: protectedProcedure
+  updateProduct: protectedProcedure
     .input(z.object({
       id: z.number(),
       name: z.string().optional(),
