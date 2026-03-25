@@ -2,6 +2,7 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
+import { sql } from "drizzle-orm";
 
 export const auditLogsRouter = router({
   // Get audit logs for a farm
@@ -21,11 +22,8 @@ export const auditLogsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access to the farm
-        const hasAccess = await db.query.raw(
-          `SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
-          [ctx.user.id, parseInt(input.farmId)]
-        );
+        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -34,26 +32,32 @@ export const auditLogsRouter = router({
           });
         }
 
-        let query = `SELECT id, userId, action, resourceType, resourceId, oldValue, newValue, 
-                            ipAddress, status, createdAt
-                     FROM audit_logs
-                     WHERE farmId = ?`;
-        const params: any[] = [parseInt(input.farmId)];
-
+        // Build dynamic query using Drizzle ORM
+        let whereConditions = [sql`farmId = ${parseInt(input.farmId)}`];
+        
         if (input.action) {
-          query += ` AND action = ?`;
-          params.push(input.action);
+          whereConditions.push(sql`action = ${input.action}`);
         }
-
+        
         if (input.userId) {
-          query += ` AND userId = ?`;
-          params.push(input.userId);
+          whereConditions.push(sql`userId = ${input.userId}`);
         }
-
-        query += ` ORDER BY createdAt DESC LIMIT ? OFFSET ?`;
-        params.push(input.limit, input.offset);
-
-        const logs = await db.query.raw(query, params);
+        
+        const whereClause = whereConditions.length > 0 
+          ? sql`WHERE ${whereConditions.reduce((acc, cond, i) => 
+              i === 0 ? cond : sql`${acc} AND ${cond}`
+            )}`
+          : sql``;
+        
+        const logs = await db.execute(sql`
+          SELECT id, userId, action, resourceType, resourceId, oldValue, newValue, 
+                 ipAddress, status, createdAt
+          FROM audit_logs
+          ${whereClause}
+          ORDER BY createdAt DESC
+          LIMIT ${input.limit}
+          OFFSET ${input.offset}
+        `);
 
         return logs || [];
       } catch (error) {
@@ -75,11 +79,8 @@ export const auditLogsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access
-        const hasAccess = await db.query.raw(
-          `SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
-          [ctx.user.id, parseInt(input.farmId)]
-        );
+        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -89,17 +90,14 @@ export const auditLogsRouter = router({
         }
 
         // Get activity summary
-        const summary = await db.query.raw(
-          `SELECT 
+        const summary = await db.execute(sql`SELECT 
              COUNT(*) as totalActions,
              SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successfulActions,
              SUM(CASE WHEN status = 'failure' THEN 1 ELSE 0 END) as failedActions,
              MAX(createdAt) as lastActivityAt,
              COUNT(DISTINCT DATE(createdAt)) as activeDays
            FROM audit_logs
-           WHERE userId = ? AND farmId = ?`,
-          [input.userId, parseInt(input.farmId)]
-        );
+           WHERE userId = ${input.userId}} AND farmId = ${parseInt(input.farmId)}}`);
 
         return summary?.[0] || {
           totalActions: 0,
@@ -131,14 +129,11 @@ export const auditLogsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const logs = await db.query.raw(
-          `SELECT id, action, resourceType, resourceId, ipAddress, status, createdAt
+        const logs = await db.execute(sql`SELECT id, action, resourceType, resourceId, ipAddress, status, createdAt
            FROM audit_logs
-           WHERE userId = ?
+           WHERE userId = ${ctx.user.id}}
            ORDER BY createdAt DESC
-           LIMIT ? OFFSET ?`,
-          [ctx.user.id, input.limit, input.offset]
-        );
+           LIMIT ${input.limit}} OFFSET ${input.offset}}`);
 
         return logs || [];
       } catch (error) {
@@ -172,24 +167,12 @@ export async function logAuditAction(
       return;
     }
 
-    await db.query.raw(
-      `INSERT INTO audit_logs 
+    const oldValueStr = oldValue ? JSON.stringify(oldValue) : null;
+    const newValueStr = newValue ? JSON.stringify(newValue) : null;
+    
+    await db.execute(sql`INSERT INTO audit_logs 
        (userId, farmId, action, resourceType, resourceId, oldValue, newValue, ipAddress, userAgent, status, errorMessage)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        userId,
-        farmId,
-        action,
-        resourceType,
-        resourceId,
-        oldValue ? JSON.stringify(oldValue) : null,
-        newValue ? JSON.stringify(newValue) : null,
-        ipAddress,
-        userAgent,
-        status,
-        errorMessage
-      ]
-    );
+       VALUES (${userId}, ${farmId}, ${action}, ${resourceType}, ${resourceId}, ${oldValueStr}, ${newValueStr}, ${ipAddress}, ${userAgent}, ${status}, ${errorMessage})`);
   } catch (error) {
     console.error("Error logging audit action:", error);
   }

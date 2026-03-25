@@ -2,6 +2,7 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
+import { sql } from "drizzle-orm";
 
 export const smsNotificationsRouter = router({
   // Send SMS alert to worker
@@ -19,11 +20,8 @@ export const smsNotificationsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify sender is manager or admin
-        const senderRole = await db.query.raw(
-          `SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
-          [ctx.user.id, parseInt(input.farmId)]
-        );
+        const senderRole = await db.execute(sql`SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
 
         if (!senderRole || senderRole.length === 0 || !["admin", "manager"].includes(senderRole[0].role)) {
           throw new TRPCError({
@@ -33,11 +31,8 @@ export const smsNotificationsRouter = router({
         }
 
         // Get worker's phone number
-        const worker = await db.query.raw(
-          `SELECT fw.phoneNumber FROM farm_workers fw
-           WHERE fw.userId = ? AND fw.farmId = ?`,
-          [input.workerId, parseInt(input.farmId)]
-        );
+        const worker = await db.execute(sql`SELECT fw.phoneNumber FROM farm_workers fw
+           WHERE fw.userId = ${input.workerId}} AND fw.farmId = ${parseInt(input.farmId)}}`);
 
         if (!worker || worker.length === 0 || !worker[0].phoneNumber) {
           throw new TRPCError({
@@ -60,11 +55,8 @@ export const smsNotificationsRouter = router({
         };
 
         // Log SMS notification
-        await db.query.raw(
-          `INSERT INTO sms_notifications (senderId, recipientId, farmId, alertType, message, status, phoneNumber)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [ctx.user.id, input.workerId, parseInt(input.farmId), input.alertType, smsMessage, "sent", worker[0].phoneNumber]
-        );
+        await db.execute(sql`INSERT INTO sms_notifications (senderId, recipientId, farmId, alertType, message, status, phoneNumber)
+           VALUES (${ctx.user.id}}, ${input.workerId}}, ${parseInt(input.farmId)}}, ${input.alertType}}, ${smsMessage}}, ${"sent"}}, ${worker[0].phoneNumber}})`);
 
         return smsResult;
       } catch (error) {
@@ -90,11 +82,8 @@ export const smsNotificationsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user has access to farm
-        const hasAccess = await db.query.raw(
-          `SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
-          [ctx.user.id, parseInt(input.farmId)]
-        );
+        const hasAccess = await db.execute(sql`SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
 
         if (!hasAccess || hasAccess.length === 0) {
           throw new TRPCError({
@@ -103,14 +92,11 @@ export const smsNotificationsRouter = router({
           });
         }
 
-        const history = await db.query.raw(
-          `SELECT id, senderId, recipientId, alertType, message, status, phoneNumber, createdAt
+        const history = await db.execute(sql`SELECT id, senderId, recipientId, alertType, message, status, phoneNumber, createdAt
            FROM sms_notifications
-           WHERE farmId = ?
+           WHERE farmId = ${parseInt(input.farmId)}}
            ORDER BY createdAt DESC
-           LIMIT ? OFFSET ?`,
-          [parseInt(input.farmId), input.limit, input.offset]
-        );
+           LIMIT ${input.limit}} OFFSET ${input.offset}}`);
 
         return history || [];
       } catch (error) {
@@ -131,12 +117,9 @@ export const smsNotificationsRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-        const status = await db.query.raw(
-          `SELECT id, status, phoneNumber, message, deliveredAt, failureReason
+        const status = await db.execute(sql`SELECT id, status, phoneNumber, message, deliveredAt, failureReason
            FROM sms_notifications
-           WHERE id = ?`,
-          [input.messageId]
-        );
+           WHERE id = ${input.messageId}}`);
 
         if (!status || status.length === 0) {
           throw new TRPCError({
@@ -169,11 +152,8 @@ export const smsNotificationsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is manager or admin
-        const userRole = await db.query.raw(
-          `SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
-          [ctx.user.id, parseInt(input.farmId)]
-        );
+        const userRole = await db.execute(sql`SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
 
         if (!userRole || userRole.length === 0 || !["admin", "manager"].includes(userRole[0].role)) {
           throw new TRPCError({
@@ -182,10 +162,7 @@ export const smsNotificationsRouter = router({
           });
         }
 
-        await db.query.raw(
-          `UPDATE farm_workers SET smsNotificationsEnabled = ? WHERE userId = ? AND farmId = ?`,
-          [input.enabled, input.workerId, parseInt(input.farmId)]
-        );
+        await db.execute(sql`UPDATE farm_workers SET smsNotificationsEnabled = ${input.enabled}} WHERE userId = ${input.workerId}} AND farmId = ${parseInt(input.farmId)}}`);
 
         return {
           success: true,

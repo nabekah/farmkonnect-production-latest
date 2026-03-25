@@ -2,6 +2,7 @@ import { router, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
+import { sql } from "drizzle-orm";
 import crypto from "crypto";
 
 const generateInvitationCode = () => crypto.randomBytes(32).toString("hex");
@@ -22,10 +23,7 @@ export const invitationsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is owner of the farm
-        const farmOwner = await db.query.raw(
-          `SELECT id FROM farms WHERE id = ? AND ownerId = ?`,
-          [parseInt(input.farmId), ctx.user.id]
-        );
+        const farmOwner = await db.execute(sql`SELECT id FROM farms WHERE id = ${parseInt(input.farmId)}} AND ownerId = ${ctx.user.id}}`);
 
         if (!farmOwner || farmOwner.length === 0) {
           throw new TRPCError({
@@ -39,11 +37,8 @@ export const invitationsRouter = router({
         const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
         // Create invitation
-        await db.query.raw(
-          `INSERT INTO user_invitations (invitationCode, farmId, invitedEmail, role, invitedBy, expiresAt)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [invitationCode, parseInt(input.farmId), input.invitedEmail, input.role, ctx.user.id, expiresAt]
-        );
+        await db.execute(sql`INSERT INTO user_invitations (invitationCode, farmId, invitedEmail, role, invitedBy, expiresAt)
+           VALUES (${invitationCode}}, ${parseInt(input.farmId)}}, ${input.invitedEmail}}, ${input.role}}, ${ctx.user.id}}, ${expiresAt}})`);
 
         // Send email notification (using Manus notification system)
         const invitationLink = `${process.env.VITE_FRONTEND_URL}/accept-invitation/${invitationCode}`;
@@ -75,10 +70,7 @@ export const invitationsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Verify user is owner of the farm
-        const farmOwner = await db.query.raw(
-          `SELECT id FROM farms WHERE id = ? AND ownerId = ?`,
-          [parseInt(input.farmId), ctx.user.id]
-        );
+        const farmOwner = await db.execute(sql`SELECT id FROM farms WHERE id = ${parseInt(input.farmId)}} AND ownerId = ${ctx.user.id}}`);
 
         if (!farmOwner || farmOwner.length === 0) {
           throw new TRPCError({
@@ -87,13 +79,10 @@ export const invitationsRouter = router({
           });
         }
 
-        const invitations = await db.query.raw(
-          `SELECT id, invitedEmail, role, status, createdAt, expiresAt
+        const invitations = await db.execute(sql`SELECT id, invitedEmail, role, status, createdAt, expiresAt
            FROM user_invitations
-           WHERE farmId = ? AND status IN ('pending', 'accepted')
-           ORDER BY createdAt DESC`,
-          [parseInt(input.farmId)]
-        );
+           WHERE farmId = ${parseInt(input.farmId)}} AND status IN ('pending', 'accepted')
+           ORDER BY createdAt DESC`);
 
         return invitations || [];
       } catch (error) {
@@ -115,11 +104,8 @@ export const invitationsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Get invitation
-        const invitation = await db.query.raw(
-          `SELECT id, farmId, role, status, expiresAt FROM user_invitations
-           WHERE invitationCode = ?`,
-          [input.invitationCode]
-        );
+        const invitation = await db.execute(sql`SELECT id, farmId, role, status, expiresAt FROM user_invitations
+           WHERE invitationCode = ${input.invitationCode}}`);
 
         if (!invitation || invitation.length === 0) {
           throw new TRPCError({
@@ -147,19 +133,13 @@ export const invitationsRouter = router({
         }
 
         // Assign worker to farm
-        await db.query.raw(
-          `INSERT INTO farm_workers (userId, farmId, role, status)
-           VALUES (?, ?, ?, 'active')
-           ON DUPLICATE KEY UPDATE role = VALUES(role), status = 'active'`,
-          [ctx.user.id, inv.farmId, inv.role]
-        );
+        await db.execute(sql`INSERT INTO farm_workers (userId, farmId, role, status)
+           VALUES (${ctx.user.id}}, ${inv.farmId}}, ${inv.role}}, 'active')
+           ON DUPLICATE KEY UPDATE role = VALUES(role), status = 'active'`);
 
         // Update invitation status
-        await db.query.raw(
-          `UPDATE user_invitations SET status = 'accepted', acceptedAt = NOW()
-           WHERE invitationCode = ?`,
-          [input.invitationCode]
-        );
+        await db.execute(sql`UPDATE user_invitations SET status = 'accepted', acceptedAt = NOW()
+           WHERE invitationCode = ${input.invitationCode}}`);
 
         return {
           success: true,
@@ -186,10 +166,7 @@ export const invitationsRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         // Get invitation
-        const invitation = await db.query.raw(
-          `SELECT farmId FROM user_invitations WHERE invitationCode = ?`,
-          [input.invitationCode]
-        );
+        const invitation = await db.execute(sql`SELECT farmId FROM user_invitations WHERE invitationCode = ${input.invitationCode}}`);
 
         if (!invitation || invitation.length === 0) {
           throw new TRPCError({
@@ -199,10 +176,7 @@ export const invitationsRouter = router({
         }
 
         // Verify user is owner of the farm
-        const farmOwner = await db.query.raw(
-          `SELECT id FROM farms WHERE id = ? AND ownerId = ?`,
-          [invitation[0].farmId, ctx.user.id]
-        );
+        const farmOwner = await db.execute(sql`SELECT id FROM farms WHERE id = ${invitation[0].farmId}} AND ownerId = ${ctx.user.id}}`);
 
         if (!farmOwner || farmOwner.length === 0) {
           throw new TRPCError({
@@ -212,11 +186,8 @@ export const invitationsRouter = router({
         }
 
         // Update invitation status
-        await db.query.raw(
-          `UPDATE user_invitations SET status = 'rejected'
-           WHERE invitationCode = ?`,
-          [input.invitationCode]
-        );
+        await db.execute(sql`UPDATE user_invitations SET status = 'rejected'
+           WHERE invitationCode = ${input.invitationCode}}`);
 
         return {
           success: true,
@@ -238,14 +209,11 @@ export const invitationsRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const invitations = await db.query.raw(
-        `SELECT ui.id, ui.invitationCode, ui.farmId, f.farmName, ui.role, ui.status, ui.createdAt, ui.expiresAt
+      const invitations = await db.execute(sql`SELECT ui.id, ui.invitationCode, ui.farmId, f.farmName, ui.role, ui.status, ui.createdAt, ui.expiresAt
          FROM user_invitations ui
          JOIN farms f ON ui.farmId = f.id
-         WHERE ui.invitedEmail = ? AND ui.status = 'pending' AND ui.expiresAt > NOW()
-         ORDER BY ui.createdAt DESC`,
-        [ctx.user.email || ctx.user.id]
-      );
+         WHERE ui.invitedEmail = ${ctx.user.email || ctx.user.id}} AND ui.status = 'pending' AND ui.expiresAt > NOW()
+         ORDER BY ui.createdAt DESC`);
 
       return invitations || [];
     } catch (error) {

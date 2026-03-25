@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
 import crypto from "crypto";
+import { sql } from "drizzle-orm";
 
 // TOTP implementation (simplified - use speakeasy library in production)
 function generateTOTPSecret(): string {
@@ -28,23 +29,14 @@ export const mfaRouter = router({
       const backupCodes = generateBackupCodes();
 
       // Check if MFA settings exist
-      const existing = await db.query.raw(
-        `SELECT id FROM mfa_settings WHERE userId = ?`,
-        [ctx.user.id]
-      );
+      const existing = await db.execute(sql`SELECT id FROM mfa_settings WHERE userId = ${ctx.user.id}}`);
 
       if (existing && existing.length > 0) {
         // Update existing
-        await db.query.raw(
-          `UPDATE mfa_settings SET totpSecret = ?, backupCodes = ? WHERE userId = ?`,
-          [secret, JSON.stringify(backupCodes), ctx.user.id]
-        );
+        await db.execute(sql`UPDATE mfa_settings SET totpSecret = ${secret}}, backupCodes = ${JSON.stringify(backupCodes)}} WHERE userId = ${ctx.user.id}}`);
       } else {
         // Create new
-        await db.query.raw(
-          `INSERT INTO mfa_settings (userId, totpSecret, backupCodes) VALUES (?, ?, ?)`,
-          [ctx.user.id, secret, JSON.stringify(backupCodes)]
-        );
+        await db.execute(sql`INSERT INTO mfa_settings (userId, totpSecret, backupCodes) VALUES (${ctx.user.id}}, ${secret}}, ${JSON.stringify(backupCodes)}})`);
       }
 
       return {
@@ -81,10 +73,7 @@ export const mfaRouter = router({
         }
 
         // Activate TOTP
-        await db.query.raw(
-          `UPDATE mfa_settings SET totpEnabled = TRUE WHERE userId = ?`,
-          [ctx.user.id]
-        );
+        await db.execute(sql`UPDATE mfa_settings SET totpEnabled = TRUE WHERE userId = ${ctx.user.id}}`);
 
         return {
           success: true,
@@ -117,23 +106,14 @@ export const mfaRouter = router({
         }
 
         // Check if MFA settings exist
-        const existing = await db.query.raw(
-          `SELECT id FROM mfa_settings WHERE userId = ?`,
-          [ctx.user.id]
-        );
+        const existing = await db.execute(sql`SELECT id FROM mfa_settings WHERE userId = ${ctx.user.id}}`);
 
         if (existing && existing.length > 0) {
           // Update existing
-          await db.query.raw(
-            `UPDATE mfa_settings SET smsPhoneNumber = ? WHERE userId = ?`,
-            [input.phoneNumber, ctx.user.id]
-          );
+          await db.execute(sql`UPDATE mfa_settings SET smsPhoneNumber = ${input.phoneNumber}} WHERE userId = ${ctx.user.id}}`);
         } else {
           // Create new
-          await db.query.raw(
-            `INSERT INTO mfa_settings (userId, smsPhoneNumber) VALUES (?, ?)`,
-            [ctx.user.id, input.phoneNumber]
-          );
+          await db.execute(sql`INSERT INTO mfa_settings (userId, smsPhoneNumber) VALUES (${ctx.user.id}}, ${input.phoneNumber}})`);
         }
 
         // In production, send SMS verification code
@@ -170,10 +150,7 @@ export const mfaRouter = router({
         }
 
         // Activate SMS 2FA
-        await db.query.raw(
-          `UPDATE mfa_settings SET smsEnabled = TRUE WHERE userId = ?`,
-          [ctx.user.id]
-        );
+        await db.execute(sql`UPDATE mfa_settings SET smsEnabled = TRUE WHERE userId = ${ctx.user.id}}`);
 
         return {
           success: true,
@@ -195,10 +172,7 @@ export const mfaRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const mfaSettings = await db.query.raw(
-        `SELECT totpEnabled, smsEnabled, smsPhoneNumber FROM mfa_settings WHERE userId = ?`,
-        [ctx.user.id]
-      );
+      const mfaSettings = await db.execute(sql`SELECT totpEnabled, smsEnabled, smsPhoneNumber FROM mfa_settings WHERE userId = ${ctx.user.id}}`);
 
       if (!mfaSettings || mfaSettings.length === 0) {
         return {
@@ -227,15 +201,9 @@ export const mfaRouter = router({
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
         if (input.method === "totp") {
-          await db.query.raw(
-            `UPDATE mfa_settings SET totpEnabled = FALSE, totpSecret = NULL WHERE userId = ?`,
-            [ctx.user.id]
-          );
+          await db.execute(sql`UPDATE mfa_settings SET totpEnabled = FALSE, totpSecret = NULL WHERE userId = ${ctx.user.id}}`);
         } else {
-          await db.query.raw(
-            `UPDATE mfa_settings SET smsEnabled = FALSE, smsPhoneNumber = NULL WHERE userId = ?`,
-            [ctx.user.id]
-          );
+          await db.execute(sql`UPDATE mfa_settings SET smsEnabled = FALSE, smsPhoneNumber = NULL WHERE userId = ${ctx.user.id}}`);
         }
 
         return {
@@ -258,10 +226,7 @@ export const mfaRouter = router({
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
-      const result = await db.query.raw(
-        `SELECT backupCodes FROM mfa_settings WHERE userId = ?`,
-        [ctx.user.id]
-      );
+      const result = await db.execute(sql`SELECT backupCodes FROM mfa_settings WHERE userId = ${ctx.user.id}}`);
 
       if (!result || result.length === 0) {
         return { backupCodes: [] };
@@ -286,10 +251,7 @@ export const mfaRouter = router({
 
       const newBackupCodes = generateBackupCodes();
 
-      await db.query.raw(
-        `UPDATE mfa_settings SET backupCodes = ? WHERE userId = ?`,
-        [JSON.stringify(newBackupCodes), ctx.user.id]
-      );
+      await db.execute(sql`UPDATE mfa_settings SET backupCodes = ${JSON.stringify(newBackupCodes)}} WHERE userId = ${ctx.user.id}}`);
 
       return {
         success: true,

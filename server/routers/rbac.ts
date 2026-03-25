@@ -2,6 +2,7 @@ import { router, publicProcedure, protectedProcedure } from "../_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDb } from "../db";
+import { sql } from "drizzle-orm";
 
 export const rbacRouter = router({
   // Get user's role and permissions for a specific farm
@@ -11,13 +12,10 @@ export const rbacRouter = router({
       try {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-        const result = await db.query.raw(
-          `SELECT fw.role, fw.status, rp.permission 
+        const result = await db.execute(sql`SELECT fw.role, fw.status, rp.permission 
            FROM farm_workers fw
            LEFT JOIN role_permissions rp ON fw.role = rp.role
-           WHERE fw.userId = ? AND fw.farmId = ?`,
-          [ctx.user.id, parseInt(input.farmId)]
-        );
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}}`);
 
         if (!result || result.length === 0) {
           return null;
@@ -47,14 +45,11 @@ export const rbacRouter = router({
     try {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-      const result = await db.query.raw(
-        `SELECT DISTINCT f.id, f.farmName, f.location, fw.role, fw.status
+      const result = await db.execute(sql`SELECT DISTINCT f.id, f.farmName, f.location, fw.role, fw.status
          FROM farms f
          INNER JOIN farm_workers fw ON f.id = fw.farmId
-         WHERE fw.userId = ? AND fw.status = 'active'
-         ORDER BY f.farmName`,
-        [ctx.user.id]
-      );
+         WHERE fw.userId = ${ctx.user.id}} AND fw.status = 'active'
+         ORDER BY f.farmName`);
 
       return result || [];
     } catch (error) {
@@ -80,10 +75,7 @@ export const rbacRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
         // Verify user is owner of the farm
-        const farmOwner = await db.query.raw(
-          `SELECT id FROM farms WHERE id = ? AND ownerId = ?`,
-          [parseInt(input.farmId), ctx.user.id]
-        );
+        const farmOwner = await db.execute(sql`SELECT id FROM farms WHERE id = ${parseInt(input.farmId)}} AND ownerId = ${ctx.user.id}}`);
 
         if (!farmOwner || farmOwner.length === 0) {
           throw new TRPCError({
@@ -93,12 +85,9 @@ export const rbacRouter = router({
         }
 
         // Insert or update farm worker assignment
-        await db.query.raw(
-          `INSERT INTO farm_workers (userId, farmId, role, status)
-           VALUES (?, ?, ?, 'active')
-           ON DUPLICATE KEY UPDATE role = VALUES(role), status = 'active', updatedAt = CURRENT_TIMESTAMP`,
-          [input.userId, parseInt(input.farmId), input.role]
-        );
+        await db.execute(sql`INSERT INTO farm_workers (userId, farmId, role, status)
+           VALUES (${input.userId}}, ${parseInt(input.farmId)}}, ${input.role}}, 'active')
+           ON DUPLICATE KEY UPDATE role = VALUES(role), status = 'active', updatedAt = CURRENT_TIMESTAMP`);
 
         return {
           success: true,
@@ -122,11 +111,8 @@ export const rbacRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
         // Verify user has permission to view workers
-        const userRole = await db.query.raw(
-          `SELECT fw.role FROM farm_workers fw
-           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'`,
-          [ctx.user.id, parseInt(input.farmId)]
-        );
+        const userRole = await db.execute(sql`SELECT fw.role FROM farm_workers fw
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'`);
 
         if (!userRole || userRole.length === 0) {
           throw new TRPCError({
@@ -144,13 +130,10 @@ export const rbacRouter = router({
         }
 
         // Get all workers for the farm
-        const workers = await db.query.raw(
-          `SELECT fw.id, fw.userId, fw.role, fw.status, fw.assignedAt
+        const workers = await db.execute(sql`SELECT fw.id, fw.userId, fw.role, fw.status, fw.assignedAt
            FROM farm_workers fw
-           WHERE fw.farmId = ?
-           ORDER BY fw.assignedAt DESC`,
-          [parseInt(input.farmId)]
-        );
+           WHERE fw.farmId = ${parseInt(input.farmId)}}
+           ORDER BY fw.assignedAt DESC`);
 
         return workers || [];
       } catch (error) {
@@ -177,10 +160,7 @@ export const rbacRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
         // Verify user is owner of the farm
-        const farmOwner = await db.query.raw(
-          `SELECT id FROM farms WHERE id = ? AND ownerId = ?`,
-          [parseInt(input.farmId), ctx.user.id]
-        );
+        const farmOwner = await db.execute(sql`SELECT id FROM farms WHERE id = ${parseInt(input.farmId)}} AND ownerId = ${ctx.user.id}}`);
 
         if (!farmOwner || farmOwner.length === 0) {
           throw new TRPCError({
@@ -190,11 +170,8 @@ export const rbacRouter = router({
         }
 
         // Update worker role
-        await db.query.raw(
-          `UPDATE farm_workers SET role = ?, updatedAt = CURRENT_TIMESTAMP
-           WHERE id = ? AND farmId = ?`,
-          [input.newRole, parseInt(input.workerId), parseInt(input.farmId)]
-        );
+        await db.execute(sql`UPDATE farm_workers SET role = ${input.newRole}}, updatedAt = CURRENT_TIMESTAMP
+           WHERE id = ${parseInt(input.workerId)}} AND farmId = ${parseInt(input.farmId)}}`);
 
         return {
           success: true,
@@ -218,10 +195,7 @@ export const rbacRouter = router({
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
         // Verify user is owner of the farm
-        const farmOwner = await db.query.raw(
-          `SELECT id FROM farms WHERE id = ? AND ownerId = ?`,
-          [parseInt(input.farmId), ctx.user.id]
-        );
+        const farmOwner = await db.execute(sql`SELECT id FROM farms WHERE id = ${parseInt(input.farmId)}} AND ownerId = ${ctx.user.id}}`);
 
         if (!farmOwner || farmOwner.length === 0) {
           throw new TRPCError({
@@ -231,11 +205,8 @@ export const rbacRouter = router({
         }
 
         // Deactivate worker
-        await db.query.raw(
-          `UPDATE farm_workers SET status = 'inactive', updatedAt = CURRENT_TIMESTAMP
-           WHERE id = ? AND farmId = ?`,
-          [parseInt(input.workerId), parseInt(input.farmId)]
-        );
+        await db.execute(sql`UPDATE farm_workers SET status = 'inactive', updatedAt = CURRENT_TIMESTAMP
+           WHERE id = ${parseInt(input.workerId)}} AND farmId = ${parseInt(input.farmId)}}`);
 
         return {
           success: true,
@@ -263,13 +234,10 @@ export const rbacRouter = router({
       try {
         const db = await getDb();
         if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-        const result = await db.query.raw(
-          `SELECT COUNT(*) as count FROM farm_workers fw
+        const result = await db.execute(sql`SELECT COUNT(*) as count FROM farm_workers fw
            INNER JOIN role_permissions rp ON fw.role = rp.role
-           WHERE fw.userId = ? AND fw.farmId = ? AND fw.status = 'active'
-           AND rp.permission = ?`,
-          [ctx.user.id, parseInt(input.farmId), input.permission]
-        );
+           WHERE fw.userId = ${ctx.user.id}} AND fw.farmId = ${parseInt(input.farmId)}} AND fw.status = 'active'
+           AND rp.permission = ${input.permission}}`);
 
         return result && result.length > 0 && result[0].count > 0;
       } catch (error) {
