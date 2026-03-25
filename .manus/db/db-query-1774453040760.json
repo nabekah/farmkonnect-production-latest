@@ -1,0 +1,94 @@
+{
+  "query": "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'users' ORDER BY ORDINAL_POSITION;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2kNF22PapS9mysw.root --database WZQk4bD8DnsRHwYBkmh7FN --execute SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'users' ORDER BY ORDINAL_POSITION;",
+  "rows": [
+    {
+      "COLUMN_NAME": "id"
+    },
+    {
+      "COLUMN_NAME": "openId"
+    },
+    {
+      "COLUMN_NAME": "name"
+    },
+    {
+      "COLUMN_NAME": "email"
+    },
+    {
+      "COLUMN_NAME": "loginMethod"
+    },
+    {
+      "COLUMN_NAME": "role"
+    },
+    {
+      "COLUMN_NAME": "createdAt"
+    },
+    {
+      "COLUMN_NAME": "updatedAt"
+    },
+    {
+      "COLUMN_NAME": "lastSignedIn"
+    },
+    {
+      "COLUMN_NAME": "emailVerified"
+    },
+    {
+      "COLUMN_NAME": "emailVerificationToken"
+    },
+    {
+      "COLUMN_NAME": "emailVerificationTokenExpiresAt"
+    },
+    {
+      "COLUMN_NAME": "phone"
+    },
+    {
+      "COLUMN_NAME": "approvalStatus"
+    },
+    {
+      "COLUMN_NAME": "accountStatus"
+    },
+    {
+      "COLUMN_NAME": "accountStatusReason"
+    },
+    {
+      "COLUMN_NAME": "mfaEnabled"
+    },
+    {
+      "COLUMN_NAME": "mfaSecret"
+    },
+    {
+      "COLUMN_NAME": "mfaBackupCodes"
+    },
+    {
+      "COLUMN_NAME": "failedLoginAttempts"
+    },
+    {
+      "COLUMN_NAME": "lastFailedLoginAt"
+    },
+    {
+      "COLUMN_NAME": "accountLockedUntil"
+    },
+    {
+      "COLUMN_NAME": "googleId"
+    },
+    {
+      "COLUMN_NAME": "username"
+    },
+    {
+      "COLUMN_NAME": "passwordHash"
+    },
+    {
+      "COLUMN_NAME": "totpSecret"
+    },
+    {
+      "COLUMN_NAME": "profilePictureUrl"
+    },
+    {
+      "COLUMN_NAME": "profilePictureKey"
+    }
+  ],
+  "messages": [],
+  "stdout": "COLUMN_NAME\nid\nopenId\nname\nemail\nloginMethod\nrole\ncreatedAt\nupdatedAt\nlastSignedIn\nemailVerified\nemailVerificationToken\nemailVerificationTokenExpiresAt\nphone\napprovalStatus\naccountStatus\naccountStatusReason\nmfaEnabled\nmfaSecret\nmfaBackupCodes\nfailedLoginAttempts\nlastFailedLoginAt\naccountLockedUntil\ngoogleId\nusername\npasswordHash\ntotpSecret\nprofilePictureUrl\nprofilePictureKey\n",
+  "stderr": "",
+  "execution_time_ms": 381
+}

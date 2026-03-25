@@ -1,0 +1,35 @@
+{
+  "query": "SELECT id, email, role FROM users WHERE role = 'admin' LIMIT 5;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2kNF22PapS9mysw.root --database WZQk4bD8DnsRHwYBkmh7FN --execute SELECT id, email, role FROM users WHERE role = 'admin' LIMIT 5;",
+  "rows": [
+    {
+      "id": "1",
+      "email": "abekah.ekow@gmail.com",
+      "role": "admin"
+    },
+    {
+      "id": "3",
+      "email": "sharetekgh@gmail.com",
+      "role": "admin"
+    },
+    {
+      "id": "3360015",
+      "email": "admin@farmkonnect.test",
+      "role": "admin"
+    },
+    {
+      "id": "3960007",
+      "email": "admin@farmkonnect.com",
+      "role": "admin"
+    },
+    {
+      "id": "3960011",
+      "email": "admin@farmkonnect.com",
+      "role": "admin"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\temail\trole\n1\tabekah.ekow@gmail.com\tadmin\n3\tsharetekgh@gmail.com\tadmin\n3360015\tadmin@farmkonnect.test\tadmin\n3960007\tadmin@farmkonnect.com\tadmin\n3960011\tadmin@farmkonnect.com\tadmin\n",
+  "stderr": "",
+  "execution_time_ms": 406
+}
