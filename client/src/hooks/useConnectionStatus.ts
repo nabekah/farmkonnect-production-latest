@@ -11,6 +11,8 @@ export function useConnectionStatus() {
   });
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const handleOnline = () => {
       setIsOnline(true);
     };
