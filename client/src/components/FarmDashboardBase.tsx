@@ -31,19 +31,28 @@ interface FarmMetrics {
  */
 export const FarmDashboardBase: React.FC<FarmDashboardConfig> = ({
   variant = 'overview',
-  farmId: initialFarmId = 1,
+  farmId: initialFarmId,
   dateRange,
 }) => {
-  const [farmId, setFarmId] = useState(initialFarmId)
+  // First, fetch user's farms to get a valid farmId
+  const { data: userFarms = [] } = trpc.farm.list.useQuery()
+  
+  // Use the first farm if available, otherwise use initialFarmId or 0
+  const defaultFarmId = userFarms.length > 0 ? userFarms[0].id : (initialFarmId || 0)
+  
+  const [farmId, setFarmId] = useState(defaultFarmId)
   const [startDate, setStartDate] = useState<Date | undefined>(dateRange?.[0])
   const [endDate, setEndDate] = useState<Date | undefined>(dateRange?.[1])
 
-  // Fetch farm data
-  const { data: farmData, isLoading } = trpc.farm.getFarmAnalytics.useQuery({
-    farmId,
-    startDate,
-    endDate,
-  })
+  // Only fetch farm analytics if we have a valid farmId
+  const { data: farmData, isLoading } = trpc.farm.getFarmAnalytics.useQuery(
+    {
+      farmId,
+      startDate,
+      endDate,
+    },
+    { enabled: farmId > 0 }
+  )
 
   // Process farm data
   const metrics = useMemo<FarmMetrics>(() => {
