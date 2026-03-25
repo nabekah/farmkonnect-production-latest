@@ -22,6 +22,8 @@ export function usePWAInstall(): UsePWAInstallReturn {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     // Check if app is already installed
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true);
@@ -91,6 +93,8 @@ export function useStandaloneMode(): boolean {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
     const standalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true;
