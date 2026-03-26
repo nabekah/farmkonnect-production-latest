@@ -1,0 +1,10 @@
+Deployment Trigger
+==================
+
+This file is used to force Railway to recognize new commits and trigger a rebuild.
+
+Timestamp: 2026-03-26T18:57:00Z
+Commit: 6f323a5
+Changes: Login/logout fixes - admin user configuration and auth tests
+
+Force rebuild on Railway by updating this file.
