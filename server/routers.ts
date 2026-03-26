@@ -1,5 +1,8 @@
 import { COOKIE_NAME } from "@shared/const";
+// NOTE: Login (authRouter) and OAuth use cookie name "session", not COOKIE_NAME ("app_session_id")
+const SESSION_COOKIE_NAME = "session";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { sessionService } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router, protectedProcedure } from "./_core/trpc";
 import { withCache, invalidateCache, cacheKeys } from "./_core/redis";
@@ -413,20 +416,50 @@ export const appRouter = router({
   shiftTaskNotificationTriggers: shiftTaskNotificationTriggersRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(async ({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      
-      if (ctx.user?.id) {
-        const sessionStartTime = ctx.req.headers['x-session-start-time'] as string;
-        const sessionDurationMs = sessionStartTime ? Date.now() - parseInt(sessionStartTime) : 0;
-        await logLogoutEvent({
-          userId: ctx.user.id,
-          sessionDurationMs,
-        });
+    logout: protectedProcedure.mutation(async ({ ctx }) => {
+      try {
+        console.log("\n[Logout] ===== LOGOUT MUTATION CALLED =====");
+        console.log("[Logout] ctx.user:", ctx.user);
+        console.log("[Logout] ctx.user?.id:", ctx.user?.id);
+        
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        const token = ctx.req.cookies?.[SESSION_COOKIE_NAME] || ctx.req.cookies?.[COOKIE_NAME];
+        
+        console.log("[Logout] Token from cookies:", token ? `${token.substring(0, 30)}...` : "null");
+        console.log("[Logout] SESSION_COOKIE_NAME:", SESSION_COOKIE_NAME);
+        console.log("[Logout] COOKIE_NAME:", COOKIE_NAME);
+        
+        // Blacklist the current token to prevent reuse
+        if (token && ctx.user?.id) {
+          console.log("[Logout] Blacklisting token for user", ctx.user.id);
+          try {
+            await sessionService.blacklistToken(token, ctx.user.id.toString());
+            console.log("[Logout] Token blacklisted successfully");
+          } catch (blacklistError) {
+            console.error("[Logout] Error blacklisting token:", blacklistError);
+          }
+        } else {
+          console.log("[Logout] No token or user found - token:", !!token, "user.id:", ctx.user?.id);
+        }
+        
+        // Clear BOTH cookie names to handle all cases
+        ctx.res.clearCookie(SESSION_COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+        
+        if (ctx.user?.id) {
+          const sessionStartTime = ctx.req.headers['x-session-start-time'] as string;
+          const sessionDurationMs = sessionStartTime ? Date.now() - parseInt(sessionStartTime) : 0;
+          await logLogoutEvent({
+            userId: ctx.user.id,
+            sessionDurationMs,
+          });
+        }
+        
+        return { success: true } as const;
+      } catch (error) {
+        console.error("[Logout] Unexpected error:", error);
+        return { success: false } as const;
       }
-      
-      return { success: true } as const;
     }),
     getAllUsers: publicProcedure.query(async () => {
       const db = await getDb();

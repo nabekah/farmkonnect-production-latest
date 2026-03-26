@@ -5,6 +5,9 @@ import { SignJWT, jwtVerify } from "jose";
 import type { User } from "../../drizzle/schema";
 import { ENV } from "./env";
 import { getUserById } from "../db";
+import { getDb } from "../db";
+import { tokenBlacklist } from "../../drizzle/schema";
+import { eq, lt } from "drizzle-orm";
 
 export type SessionPayload = {
   userId: string;
@@ -25,9 +28,10 @@ class SessionService {
     const token = await new SignJWT({
       userId,
       ...payload,
+      iat: Math.floor(Date.now() / 1000),
     })
       .setProtectedHeader({ alg: "HS256" })
-      .setExpirationTime("1y")
+      .setExpirationTime("24h")
       .sign(this.secret);
 
     return token;
@@ -35,10 +39,66 @@ class SessionService {
 
   async verifySessionToken(token: string): Promise<SessionPayload> {
     try {
+      // Check if token is in blacklist BEFORE verifying (logged out)
+      const isBlacklisted = await this.isTokenBlacklisted(token);
+      if (isBlacklisted) {
+        console.log("[Session] Token is blacklisted");
+        return null as any; // Return null to indicate logged out
+      }
+      
       const verified = await jwtVerify(token, this.secret);
-      return verified.payload as SessionPayload;
+      const payload = verified.payload as SessionPayload;
+      
+      return payload;
     } catch (error) {
-      throw new Error("Invalid or expired session token");
+      console.error("[Session] Token verification failed:", error);
+      return null as any; // Return null on any error
+    }
+  }
+
+  async blacklistToken(token: string, userId: string): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) {
+        console.error("[Session] No database connection available for blacklisting");
+        return;
+      }
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+      await db.insert(tokenBlacklist).values({
+        token,
+        userId: parseInt(userId),
+        expiresAt,
+      });
+      console.log("[Session] Token blacklisted in database");
+    } catch (error) {
+      console.error("[Session] Failed to blacklist token:", error);
+    }
+  }
+
+  async isTokenBlacklisted(token: string): Promise<boolean> {
+    try {
+      const db = await getDb();
+      if (!db) return false;
+      
+      // Check if token is in blacklist
+      const result = await db.select().from(tokenBlacklist).where(eq(tokenBlacklist.token, token)).limit(1);
+      return result.length > 0;
+    } catch (error) {
+      console.error("[Session] Failed to check blacklist:", error);
+      return false;
+    }
+  }
+
+  async cleanupExpiredTokens(): Promise<void> {
+    try {
+      const db = await getDb();
+      if (!db) return;
+      
+      // Clean up expired tokens (run periodically)
+      // For now, this is a no-op as we rely on database cleanup
+      console.log("[Session] Cleanup expired tokens (scheduled)");
+    } catch (error) {
+      console.error("[Session] Failed to cleanup expired tokens:", error);
     }
   }
 }
@@ -54,6 +114,10 @@ export const sdk = {
     }
     try {
       const payload = await sessionService.verifySessionToken(token);
+      if (!payload) {
+        // Token is blacklisted or invalid
+        return null;
+      }
       const user = await getUserById(payload.userId);
       return user || null;
     } catch (error) {

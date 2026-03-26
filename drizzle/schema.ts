@@ -4240,3 +4240,20 @@ export const emailCampaignRecipients = mysqlTable("emailCampaignRecipients", {
 });
 export type EmailCampaignRecipient = typeof emailCampaignRecipients.$inferSelect;
 export type InsertEmailCampaignRecipient = typeof emailCampaignRecipients.$inferInsert;
+
+
+// Token blacklist for logout functionality
+export const tokenBlacklist = mysqlTable("tokenBlacklist", {
+  id: int("id").autoincrement().primaryKey(),
+  token: text("token").notNull(),
+  userId: int("userId").notNull(),
+  blacklistedAt: timestamp("blacklistedAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(), // When to delete this record
+});
+
+export const tokenBlacklistRelations = relations(tokenBlacklist, ({ one }) => ({
+  user: one(users, {
+    fields: [tokenBlacklist.userId],
+    references: [users.id],
+  }),
+}));

@@ -6239,3 +6239,13 @@ All components are integrated into the Financial Management Dashboard and tested
 - [ ] Deploy to production via Manus UI Publish button
 - [ ] Set up Sentry alerts and dashboards
 - [ ] Monitor real-time errors in Sentry dashboard
+
+## Login/Logout Bug Fix (March 2026)
+- [x] Fix cookie name mismatch: login set "session" cookie but logout cleared "app_session_id" cookie
+- [x] Fix missing await on getDb() in blacklistToken() causing db.insert to fail
+- [x] Verify token blacklist properly prevents re-authentication after logout
+- [x] Verify re-login works after logout
+- [x] End-to-end auth flow test passing (login → auth check → logout → blacklist verified → re-login)
+- [ ] Push changes to GitHub
+- [ ] Deploy to Railway production
+- [ ] Test on production (www.farmconnekt.com)

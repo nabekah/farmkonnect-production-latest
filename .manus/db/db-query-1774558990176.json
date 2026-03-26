@@ -1,0 +1,18 @@
+{
+  "query": "SELECT id, email, username, emailVerified, approvalStatus, accountStatus FROM users WHERE email = 'admin@farmkonnect.com' LIMIT 1;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2kNF22PapS9mysw.root --database WZQk4bD8DnsRHwYBkmh7FN --execute SELECT id, email, username, emailVerified, approvalStatus, accountStatus FROM users WHERE email = 'admin@farmkonnect.com' LIMIT 1;",
+  "rows": [
+    {
+      "id": "3960011",
+      "email": "admin@farmkonnect.com",
+      "username": "admin",
+      "emailVerified": "1",
+      "approvalStatus": "approved",
+      "accountStatus": "active"
+    }
+  ],
+  "messages": [],
+  "stdout": "id\temail\tusername\temailVerified\tapprovalStatus\taccountStatus\n3960011\tadmin@farmkonnect.com\tadmin\t1\tapproved\tactive\n",
+  "stderr": "",
+  "execution_time_ms": 419
+}
