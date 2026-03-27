@@ -66,7 +66,7 @@ import { suspiciousActivityAlertsRouter } from "./routers/suspiciousActivityAler
 import { authRouter } from "./routers/authRouter";
 import { logAuthenticationAttempt, logLogoutEvent } from "./_core/authAnalyticsLogger";
 import { emailNotifications } from "./_core/emailNotifications";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { alertHistoryRouter } from "./alertHistoryRouter";
 import { fertilizerRouter } from "./fertilizerRouter";
 import { reportSchedulingRouter } from "./routers/reportScheduling";
@@ -692,9 +692,15 @@ export const appRouter = router({
         // Get farm data
         const totalArea = farm.sizeHectares ? parseFloat(farm.sizeHectares.toString()) : 0;
 
-        // Get crops planted
-        const farmCrops = await db.select().from(crops).where(eq(crops.farmId, input.farmId));
-        const cropsPlanted = farmCrops.length;
+        // Get crops planted (crops are linked to farms through cropCycles)
+        const farmCropCycles = await db.select().from(cropCycles).where(eq(cropCycles.farmId, input.farmId));
+        const cropsPlanted = farmCropCycles.length;
+        
+        // Get the actual crop details for crop health display
+        const cropIds = [...new Set(farmCropCycles.map(c => c.cropId))];
+        const farmCrops = cropIds.length > 0 
+          ? await db.select().from(crops).where(inArray(crops.id, cropIds))
+          : [];
 
         // Calculate health score (placeholder)
         const healthScore = 85;

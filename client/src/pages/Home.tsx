@@ -63,13 +63,6 @@ export default function Home() {
   const params = new URLSearchParams(location.split("?")[1] || "");
   const authError = params.get("auth_error");
 
-  // Don't redirect authenticated users - show welcome dashboard instead
-
-  // Show authentication error if present
-  if (authError) {
-    return <AuthErrorPage />;
-  }
-
   // Initialize session timeout and remember me features
   // These hooks are safe to call unconditionally - they handle auth state internally
   useSessionTimeout();
@@ -87,6 +80,22 @@ export default function Home() {
     }
   }, []);
 
+  // Role-based redirect for authenticated users
+  useEffect(() => {
+    if (!loading && isAuthenticated && user) {
+      if (user.role === 'admin') {
+        setLocation('/admin-dashboard');
+      } else {
+        setLocation('/dashboard');
+      }
+    }
+  }, [loading, isAuthenticated, user, setLocation]);
+
+  // Show authentication error if present
+  if (authError) {
+    return <AuthErrorPage />;
+  }
+
   // Show loading state while checking authentication
   if (loading) {
     return (
@@ -101,7 +110,7 @@ export default function Home() {
     return null;
   }
 
-  // Show welcome dashboard for authenticated users
+  // Show welcome dashboard while redirecting authenticated users
   if (isAuthenticated && user) {
     return (
       <DashboardLayout>

@@ -6254,3 +6254,10 @@ All components are integrated into the Financial Management Dashboard and tested
 - [x] Fix login screen still showing after successful login (should redirect to /dashboard)
 - [x] Fix dashboard error ("Oops! Something went wrong") when navigating to dashboard
 - [x] Audit full post-login flow: auth state, routing, redirect logic
+
+## Next Steps (March 27, 2026)
+- [x] Test full browser login flow on production (www.farmconnekt.com)
+- [x] Add a farm for the admin user (Green Valley Farm, id: 1080006)
+- [x] Implement role-based dashboard routing (admin → admin dashboard, farmer → farmer dashboard)
+- [ ] Deploy role-based routing to production
+- [x] Fix getFarmAnalytics SQL bug (crops.farmId → cropCycles.farmId)

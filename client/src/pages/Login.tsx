@@ -16,12 +16,17 @@ export default function Login() {
   const utils = trpc.useUtils();
 
   const loginMutation = trpc.auth.loginWithPassword.useMutation({
-    onSuccess: async (data) => {
+    onSuccess: async (data: any) => {
       // Invalidate and refetch auth.me so DashboardLayout sees the user immediately
       await utils.auth.me.invalidate();
       await utils.auth.me.refetch();
-      // Redirect to dashboard on successful login
-      setLocation("/dashboard");
+      // Role-based redirect: admin → admin dashboard, farmer → farmer dashboard
+      const userRole = data?.user?.role;
+      if (userRole === 'admin') {
+        setLocation("/admin-dashboard");
+      } else {
+        setLocation("/dashboard");
+      }
     },
     onError: (error) => {
       setError(error.message);

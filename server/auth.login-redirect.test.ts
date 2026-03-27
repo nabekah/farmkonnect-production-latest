@@ -75,17 +75,19 @@ describe("Router Configuration", () => {
     expect(appContent).toContain("DashboardLayout");
   });
 
-  it("Login.tsx should redirect to /dashboard not /farmer-dashboard", async () => {
+  it("Login.tsx should redirect based on user role", async () => {
     const fs = await import("fs");
     const loginContent = fs.readFileSync(
       "/home/ubuntu/farmkonnect_app/client/src/pages/Login.tsx",
       "utf-8"
     );
     
-    // Should redirect to /dashboard
+    // Should redirect admin to /admin-dashboard
+    expect(loginContent).toContain('setLocation("/admin-dashboard")');
+    // Should redirect non-admin to /dashboard
     expect(loginContent).toContain('setLocation("/dashboard")');
-    // Should NOT redirect to /farmer-dashboard
-    expect(loginContent).not.toContain('setLocation("/farmer-dashboard")');
+    // Should check user role
+    expect(loginContent).toContain("userRole === 'admin'");
   });
 
   it("Login.tsx should invalidate auth cache before redirecting", async () => {
@@ -99,6 +101,29 @@ describe("Router Configuration", () => {
     expect(loginContent).toContain("utils.auth.me.invalidate()");
     expect(loginContent).toContain("utils.auth.me.refetch()");
     expect(loginContent).toContain("trpc.useUtils()");
+  });
+
+  it("should have /admin-dashboard route defined", async () => {
+    const fs = await import("fs");
+    const appContent = fs.readFileSync(
+      "/home/ubuntu/farmkonnect_app/client/src/App.tsx",
+      "utf-8"
+    );
+    
+    expect(appContent).toContain('path="/admin-dashboard"');
+    expect(appContent).toContain("AdminDashboard");
+  });
+
+  it("Home.tsx should redirect authenticated users based on role", async () => {
+    const fs = await import("fs");
+    const homeContent = fs.readFileSync(
+      "/home/ubuntu/farmkonnect_app/client/src/pages/Home.tsx",
+      "utf-8"
+    );
+    
+    expect(homeContent).toContain("user.role === 'admin'");
+    expect(homeContent).toContain("setLocation('/admin-dashboard')");
+    expect(homeContent).toContain("setLocation('/dashboard')");
   });
 });
 
@@ -144,5 +169,22 @@ describe("Backend farms router", () => {
     expect(routersContent).toContain("farms: router({");
     expect(routersContent).toContain("list: protectedProcedure");
     expect(routersContent).toContain("getFarmAnalytics: protectedProcedure");
+  });
+});
+
+describe("getFarmAnalytics SQL fix", () => {
+  it("should use cropCycles.farmId instead of crops.farmId for farm analytics", async () => {
+    const fs = await import("fs");
+    const routersContent = fs.readFileSync(
+      "/home/ubuntu/farmkonnect_app/server/routers.ts",
+      "utf-8"
+    );
+    
+    // Should use cropCycles for farm-specific crop data (crops table has no farmId)
+    expect(routersContent).toContain("cropCycles.farmId");
+    // Should NOT use crops.farmId (which doesn't exist)
+    expect(routersContent).not.toContain("crops.farmId");
+    // Should import inArray for querying crops by IDs
+    expect(routersContent).toContain("inArray");
   });
 });

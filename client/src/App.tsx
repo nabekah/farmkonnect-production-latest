@@ -162,6 +162,7 @@ import { useZoomKeyboardShortcuts } from "./hooks/useZoomKeyboardShortcuts";
 import { ProfileMenu } from "./components/ProfileMenu";
 import { TestEmailPage } from "./pages/TestEmail";
 import Login from "./pages/Login";
+import AdminDashboard from "./pages/AdminDashboard";
 
 // Build version: 2.0.1 - Force rebuild with all fixes
 function Router() {
@@ -173,6 +174,13 @@ function Router() {
         {() => (
           <DashboardLayout>
             <FarmerDashboard />
+          </DashboardLayout>
+        )}
+      </Route>
+      <Route path="/admin-dashboard">
+        {() => (
+          <DashboardLayout>
+            <AdminDashboard />
           </DashboardLayout>
         )}
       </Route>
