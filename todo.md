@@ -6259,5 +6259,11 @@ All components are integrated into the Financial Management Dashboard and tested
 - [x] Test full browser login flow on production (www.farmconnekt.com)
 - [x] Add a farm for the admin user (Green Valley Farm, id: 1080006)
 - [x] Implement role-based dashboard routing (admin → admin dashboard, farmer → farmer dashboard)
-- [ ] Deploy role-based routing to production
+- [x] Deploy role-based routing to production
 - [x] Fix getFarmAnalytics SQL bug (crops.farmId → cropCycles.farmId)
+
+## Full System Audit (March 27, 2026)
+- [x] Identify all routes and menu items (38 main menu pages, 113 total routes)
+- [x] Test all pages on production for errors (673 unique tRPC calls audited)
+- [x] Fix critical errors found during audit (training router mapping: trainingCertificationCleanRouter → trainingRouter)
+- [ ] Deploy fixes to production

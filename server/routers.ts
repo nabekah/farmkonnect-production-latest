@@ -367,7 +367,8 @@ export const appRouter = router({
   financialManagement: financialManagementRouter,
   budgetManagement: budgetManagementRouter,
   // laborManagement: laborManagementCleanRouter, // Removed duplicate - using laborManagementRouter instead
-  training: trainingCertificationCleanRouter,
+  training: trainingRouter,
+  trainingCertification: trainingCertificationCleanRouter,
   equipment: equipmentManagementCleanRouter,
   certificationRenewal: certificationRenewalCleanRouter,
   maintenanceAlerts: maintenanceAlertsCleanRouter,
