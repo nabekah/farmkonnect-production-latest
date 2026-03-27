@@ -66,14 +66,37 @@ interface NewTask {
 export function ManagerTaskAssignment() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
-  const [farmId, setFarmId] = useState<number | null>(null);
+  const [farmId, setFarmId] = useState<number>(1);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const createTaskMutation = trpc.fieldWorker.createTask.useMutation();
+  const utils = trpc.useUtils();
+
+  const createTaskMutation = trpc.fieldWorker.createTask.useMutation({
+    onSuccess: () => {
+      utils.fieldWorker.getTasks.invalidate({ farmId });
+      setNewTask({
+        title: '',
+        description: '',
+        taskType: 'monitoring',
+        priority: 'medium',
+        dueDate: new Date().toISOString().split('T')[0],
+        dueTime: '09:00',
+        assignedToUserId: 0,
+        fieldId: undefined,
+      });
+      setIsDialogOpen(false);
+    },
+  });
+
+  const deleteTaskMutation = trpc.fieldWorker.deleteTask.useMutation({
+    onSuccess: () => {
+      utils.fieldWorker.getTasks.invalidate({ farmId });
+    },
+  });
 
   const { errors, validateForm, clearError } = useFormValidation({
     title: { required: true, minLength: 3 },
@@ -96,54 +119,24 @@ export function ManagerTaskAssignment() {
     fieldId: undefined,
   });
 
-  // Fetch field workers from database with loading state
-  // Use farmId if set, otherwise default to 1. Always enable the query.
-  // Note: Not filtering by status to get all workers
-  const { data: fieldWorkers = [], isLoading: isLoadingWorkers } = trpc.workforce.workers.list.useQuery(
-    { farmId: farmId || 1 },
+  // Fetch real tasks from database
+  const { data: allTasks = [], isLoading: isLoadingTasks } = trpc.fieldWorker.getTasks.useQuery(
+    { farmId },
     { enabled: true }
   );
 
-  // Set default farmId on component mount if not already set
-  useEffect(() => {
-    if (!farmId && user) {
-      setFarmId(1); // Default to farm 1
-    }
-  }, [user, farmId]);
+  // Fetch field workers
+  const { data: fieldWorkers = [], isLoading: isLoadingWorkers } = trpc.workforce.workers.list.useQuery(
+    { farmId },
+    { enabled: true }
+  );
 
-  // Mock tasks - TODO: Fetch from API
-  const allTasks = [
-    {
-      id: '1',
-      title: 'Monitor crop health in Field A',
-      taskType: 'monitoring',
-      priority: 'high',
-      status: 'in_progress',
-      assignedTo: 'John Doe',
-      dueDate: new Date(Date.now() + 86400000).toISOString(),
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: '2',
-      title: 'Apply irrigation to Field B',
-      taskType: 'irrigation',
-      priority: 'medium',
-      status: 'pending',
-      assignedTo: 'Jane Smith',
-      dueDate: new Date(Date.now() + 172800000).toISOString(),
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: '3',
-      title: 'Pest control in Field C',
-      taskType: 'pest_control',
-      priority: 'urgent',
-      status: 'pending',
-      assignedTo: 'Mike Johnson',
-      dueDate: new Date(Date.now() + 3600000).toISOString(),
-      createdAt: new Date().toISOString(),
-    },
-  ];
+  // Set default farmId from user's farm
+  useEffect(() => {
+    if (user) {
+      setFarmId(1);
+    }
+  }, [user]);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -152,51 +145,42 @@ export function ManagerTaskAssignment() {
       const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
       const matchesSearch =
         searchQuery === '' ||
-        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        task.assignedTo.toLowerCase().includes(searchQuery.toLowerCase());
-
+        task.title.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesStatus && matchesPriority && matchesSearch;
     });
-  }, [filterStatus, filterPriority, searchQuery]);
+  }, [allTasks, filterStatus, filterPriority, searchQuery]);
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!validateForm(newTask)) {
-      return;
-    }
-
+    if (!validateForm(newTask)) return;
     setIsSubmitting(true);
-
-    await createTaskMutation.mutateAsync({
-      farmId: farmId || 1,
-      title: newTask.title,
-      description: newTask.description,
-      taskType: newTask.taskType,
-      priority: newTask.priority as any,
-      dueDate: `${newTask.dueDate}T${newTask.dueTime}:00`,
-      assignedToUserId: newTask.assignedToUserId,
-      fieldId: newTask.fieldId,
-    }).then(() => {
-      // Reset form
-      setNewTask({
-        title: '',
-        description: '',
-        taskType: 'monitoring',
-        priority: 'medium',
-        dueDate: new Date().toISOString().split('T')[0],
-        dueTime: '09:00',
-        assignedToUserId: 0,
-        fieldId: undefined,
+    try {
+      await createTaskMutation.mutateAsync({
+        farmId,
+        title: newTask.title,
+        description: newTask.description,
+        taskType: newTask.taskType as any,
+        priority: newTask.priority as any,
+        dueDate: `${newTask.dueDate}T${newTask.dueTime}:00`,
+        assignedToUserId: newTask.assignedToUserId,
+        fieldId: newTask.fieldId,
       });
-      setIsDialogOpen(false);
-      alert('Task created successfully!');
-    }).catch((error) => {
+    } catch (error) {
       console.error('Failed to create task:', error);
       alert('Failed to create task. Please try again.');
-    }).finally(() => {
+    } finally {
       setIsSubmitting(false);
-    })
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (!confirm('Are you sure you want to delete this task?')) return;
+    try {
+      await deleteTaskMutation.mutateAsync({ taskId });
+    } catch (error) {
+      console.error('Failed to delete task:', error);
+      alert('Failed to delete task. Please try again.');
+    }
   };
 
   const getPriorityColor = (priority: string) => {
@@ -205,16 +189,11 @@ export function ManagerTaskAssignment() {
 
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case 'completed':
-        return 'bg-green-500';
-      case 'in_progress':
-        return 'bg-blue-500';
-      case 'pending':
-        return 'bg-yellow-500';
-      case 'cancelled':
-        return 'bg-red-500';
-      default:
-        return 'bg-gray-500';
+      case 'completed': return 'bg-green-500';
+      case 'in_progress': return 'bg-blue-500';
+      case 'pending': return 'bg-yellow-500';
+      case 'cancelled': return 'bg-red-500';
+      default: return 'bg-gray-500';
     }
   };
 
@@ -248,17 +227,12 @@ export function ManagerTaskAssignment() {
                   </label>
                   <Input
                     value={newTask.title}
-                    onChange={(e) => {
-                      setNewTask({ ...newTask, title: e.target.value });
-                      clearError('title');
-                    }}
+                    onChange={(e) => { setNewTask({ ...newTask, title: e.target.value }); clearError('title'); }}
                     placeholder="e.g., Monitor crop health in Field A"
                     required
                     className={errors.title ? 'border-red-500' : ''}
                   />
-                  {errors.title && (
-                    <p className="text-sm text-red-500 mt-1">{errors.title}</p>
-                  )}
+                  {errors.title && <p className="text-sm text-red-500 mt-1">{errors.title}</p>}
                 </div>
 
                 {/* Task Type */}
@@ -266,18 +240,11 @@ export function ManagerTaskAssignment() {
                   <label className="block text-sm font-medium mb-2 text-foreground">
                     Task Type <span className="text-red-500">*</span>
                   </label>
-                  <Select
-                    value={newTask.taskType}
-                    onValueChange={(value) => setNewTask({ ...newTask, taskType: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <Select value={newTask.taskType} onValueChange={(value) => setNewTask({ ...newTask, taskType: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {TASK_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
+                        <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -290,17 +257,12 @@ export function ManagerTaskAssignment() {
                   </label>
                   <Textarea
                     value={newTask.description}
-                    onChange={(e) => {
-                      setNewTask({ ...newTask, description: e.target.value });
-                      clearError('description');
-                    }}
+                    onChange={(e) => { setNewTask({ ...newTask, description: e.target.value }); clearError('description'); }}
                     placeholder="Detailed instructions for the task"
                     rows={3}
                     className={errors.description ? 'border-red-500' : ''}
                   />
-                  {errors.description && (
-                    <p className="text-sm text-red-500 mt-1">{errors.description}</p>
-                  )}
+                  {errors.description && <p className="text-sm text-red-500 mt-1">{errors.description}</p>}
                 </div>
 
                 {/* Assign To */}
@@ -310,9 +272,7 @@ export function ManagerTaskAssignment() {
                   </label>
                   <Select
                     value={newTask.assignedToUserId.toString()}
-                    onValueChange={(value) =>
-                      setNewTask({ ...newTask, assignedToUserId: parseInt(value) })
-                    }
+                    onValueChange={(value) => setNewTask({ ...newTask, assignedToUserId: parseInt(value) })}
                     disabled={isLoadingWorkers}
                   >
                     <SelectTrigger className={isLoadingWorkers ? 'opacity-50' : ''}>
@@ -320,13 +280,9 @@ export function ManagerTaskAssignment() {
                     </SelectTrigger>
                     <SelectContent>
                       {isLoadingWorkers ? (
-                        <div className="p-2 text-sm text-gray-500 text-center">
-                          Loading workers...
-                        </div>
+                        <div className="p-2 text-sm text-gray-500 text-center">Loading workers...</div>
                       ) : fieldWorkers.length === 0 ? (
-                        <div className="p-2 text-sm text-gray-500 text-center">
-                          No active workers available
-                        </div>
+                        <div className="p-2 text-sm text-gray-500 text-center">No active workers available</div>
                       ) : (
                         fieldWorkers.map((worker) => (
                           <SelectItem key={worker.id} value={worker.id.toString()}>
@@ -336,28 +292,17 @@ export function ManagerTaskAssignment() {
                       )}
                     </SelectContent>
                   </Select>
-                  {errors.assignedToUserId && (
-                    <p className="text-sm text-red-500 mt-1">{errors.assignedToUserId}</p>
-                  )}
+                  {errors.assignedToUserId && <p className="text-sm text-red-500 mt-1">{errors.assignedToUserId}</p>}
                 </div>
 
                 {/* Priority */}
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
-                    Priority
-                  </label>
-                  <Select
-                    value={newTask.priority}
-                    onValueChange={(value) => setNewTask({ ...newTask, priority: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                  <label className="block text-sm font-medium mb-2 text-foreground">Priority</label>
+                  <Select value={newTask.priority} onValueChange={(value) => setNewTask({ ...newTask, priority: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {PRIORITIES.map((priority) => (
-                        <SelectItem key={priority.value} value={priority.value}>
-                          {priority.label}
-                        </SelectItem>
+                        <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -377,9 +322,7 @@ export function ManagerTaskAssignment() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-foreground">
-                      Due Time
-                    </label>
+                    <label className="block text-sm font-medium mb-2 text-foreground">Due Time</label>
                     <Input
                       type="time"
                       value={newTask.dueTime}
@@ -392,19 +335,10 @@ export function ManagerTaskAssignment() {
                 <div className="flex gap-3 pt-4">
                   <Button type="submit" disabled={isSubmitting} className="flex-1">
                     {isSubmitting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      'Create Task'
-                    )}
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</>
+                    ) : 'Create Task'}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsDialogOpen(false)}
-                  >
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Cancel
                   </Button>
                 </div>
@@ -420,56 +354,37 @@ export function ManagerTaskAssignment() {
               <div>
                 <label className="block text-sm font-medium mb-2 text-foreground">Search</label>
                 <Input
-                  placeholder="Search tasks or workers..."
+                  placeholder="Search tasks..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-2 text-foreground">Status</label>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
                     {STATUSES.map((status) => (
-                      <SelectItem key={status.value} value={status.value}>
-                        {status.label}
-                      </SelectItem>
+                      <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
               <div>
                 <label className="block text-sm font-medium mb-2 text-foreground">Priority</label>
                 <Select value={filterPriority} onValueChange={setFilterPriority}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Priorities</SelectItem>
                     {PRIORITIES.map((priority) => (
-                      <SelectItem key={priority.value} value={priority.value}>
-                        {priority.label}
-                      </SelectItem>
+                      <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="flex items-end">
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => {
-                    setSearchQuery('');
-                    setFilterStatus('all');
-                    setFilterPriority('all');
-                  }}
-                >
+                <Button variant="outline" className="w-full" onClick={() => { setSearchQuery(''); setFilterStatus('all'); setFilterPriority('all'); }}>
                   Reset Filters
                 </Button>
               </div>
@@ -479,37 +394,44 @@ export function ManagerTaskAssignment() {
 
         {/* Tasks List */}
         <div className="space-y-4">
-          {filteredTasks.length === 0 ? (
+          {isLoadingTasks ? (
+            <Card>
+              <CardContent className="pt-8 text-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mx-auto mb-3" />
+                <p className="text-muted-foreground">Loading tasks...</p>
+              </CardContent>
+            </Card>
+          ) : filteredTasks.length === 0 ? (
             <Card>
               <CardContent className="pt-8 text-center">
                 <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-                <p className="text-muted-foreground">No tasks found matching your filters</p>
+                <p className="text-muted-foreground">
+                  {allTasks.length === 0 ? 'No tasks yet. Create your first task!' : 'No tasks found matching your filters.'}
+                </p>
               </CardContent>
             </Card>
           ) : (
             filteredTasks.map((task) => (
-              <Card key={task.id} className="hover:shadow-lg transition-shadow">
+              <Card key={task.taskId} className="hover:shadow-lg transition-shadow">
                 <CardContent className="pt-6">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-lg font-semibold text-foreground">{task.title}</h3>
-                        <Badge className={getPriorityColor(task.priority)}>
-                          {task.priority}
-                        </Badge>
-                        <Badge className={getStatusBadgeVariant(task.status)}>
-                          {task.status}
-                        </Badge>
+                        <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
+                        <Badge className={getStatusBadgeVariant(task.status)}>{task.status}</Badge>
                       </div>
-
+                      {task.description && (
+                        <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
+                      )}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
                         <div>
                           <p className="text-muted-foreground">Type</p>
-                          <p className="font-medium text-foreground">{task.taskType}</p>
+                          <p className="font-medium text-foreground capitalize">{task.taskType.replace('_', ' ')}</p>
                         </div>
                         <div>
-                          <p className="text-muted-foreground">Assigned To</p>
-                          <p className="font-medium text-foreground">{task.assignedTo}</p>
+                          <p className="text-muted-foreground">Assigned To (ID)</p>
+                          <p className="font-medium text-foreground">{task.assignedToUserId}</p>
                         </div>
                         <div>
                           <p className="text-muted-foreground">Due Date</p>
@@ -525,12 +447,14 @@ export function ManagerTaskAssignment() {
                         </div>
                       </div>
                     </div>
-
                     <div className="flex gap-2">
-                      <Button variant="ghost" size="sm">
-                        Edit
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-500 hover:text-red-600"
+                        onClick={() => handleDeleteTask(task.taskId)}
+                        disabled={deleteTaskMutation.isPending}
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -549,7 +473,6 @@ export function ManagerTaskAssignment() {
               <p className="text-3xl font-bold text-foreground">{allTasks.length}</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-sm">Pending</p>
@@ -558,7 +481,6 @@ export function ManagerTaskAssignment() {
               </p>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-sm">In Progress</p>
@@ -567,7 +489,6 @@ export function ManagerTaskAssignment() {
               </p>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <p className="text-muted-foreground text-sm">Completed</p>

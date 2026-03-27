@@ -6269,11 +6269,11 @@ All components are integrated into the Financial Management Dashboard and tested
 - [x] Deploy fixes to production (training router fix verified on www.farmconnekt.com)
 
 ## Security & UX Improvements (March 27, 2026)
-- [x] Add adminProcedure middleware in server/routers.ts for admin-only backend operations
-- [x] Add AdminRoute frontend guard component that redirects non-admins away from /admin-dashboard
-- [x] Protect admin-only tRPC procedures with adminProcedure (all 17 procedures in adminRouter.ts)
-- [x] Create test farmer account (farmer@farmkonnect.com / Farmer@123456, id: 4050024)
-- [x] Verify farmer account redirects to /dashboard (not /admin-dashboard) after login
-- [x] Create reusable PageErrorBoundary component wrapping each main menu page
-- [x] Wrap all 38 main menu pages in PageErrorBoundary in App.tsx
-- [x] Test error boundary catches component errors without crashing the full app
+- [ ] Add adminProcedure middleware in server/routers.ts for admin-only backend operations
+- [ ] Add AdminRoute frontend guard component that redirects non-admins away from /admin-dashboard
+- [ ] Protect admin-only tRPC procedures with adminProcedure
+- [ ] Create test farmer account (farmer@farmkonnect.com) via API
+- [ ] Verify farmer account redirects to /dashboard (not /admin-dashboard) after login
+- [ ] Create reusable PageErrorBoundary component wrapping each main menu page
+- [ ] Wrap all 38 main menu pages in PageErrorBoundary in App.tsx
+- [ ] Test error boundary catches component errors without crashing the full app

@@ -524,4 +524,89 @@ export const fieldWorkerRouter = router({
         });
       }
     }),
+
+  createTask: protectedProcedure
+    .input(z.object({
+      farmId: z.number(),
+      title: z.string().min(1),
+      description: z.string().optional(),
+      taskType: z.enum(['planting', 'monitoring', 'irrigation', 'fertilization', 'pest_control', 'weed_control', 'harvest', 'equipment_maintenance', 'soil_testing', 'other']),
+      priority: z.enum(['low', 'medium', 'high', 'urgent']).default('medium'),
+      dueDate: z.string(), // ISO string
+      assignedToUserId: z.number(),
+      fieldId: z.number().optional(),
+      estimatedDuration: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Database not available',
+        });
+      }
+
+      try {
+        const taskId = uuidv4();
+        const now = new Date();
+        const dueDate = new Date(input.dueDate);
+
+        await db.insert(fieldWorkerTasks).values({
+          taskId,
+          farmId: input.farmId,
+          assignedToUserId: input.assignedToUserId,
+          assignedByUserId: ctx.user.id,
+          fieldId: input.fieldId ?? null,
+          title: input.title,
+          description: input.description ?? null,
+          taskType: input.taskType,
+          priority: input.priority,
+          status: 'pending',
+          dueDate,
+          estimatedDuration: input.estimatedDuration ?? null,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        // Broadcast to farm via WebSocket
+        broadcastToFarm(input.farmId, {
+          type: 'task_created',
+          data: { taskId, title: input.title, assignedToUserId: input.assignedToUserId },
+          timestamp: now.toISOString(),
+        });
+
+        return { success: true, taskId };
+      } catch (error) {
+        console.error('Failed to create task:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to create task',
+        });
+      }
+    }),
+
+  deleteTask: protectedProcedure
+    .input(z.object({
+      taskId: z.string(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) {
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Database not available',
+        });
+      }
+
+      try {
+        await db.delete(fieldWorkerTasks).where(eq(fieldWorkerTasks.taskId, input.taskId));
+        return { success: true };
+      } catch (error) {
+        console.error('Failed to delete task:', error);
+        throw new TRPCError({
+          code: 'INTERNAL_SERVER_ERROR',
+          message: 'Failed to delete task',
+        });
+      }
+    }),
 });
