@@ -13,11 +13,15 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const utils = trpc.useUtils();
 
   const loginMutation = trpc.auth.loginWithPassword.useMutation({
-    onSuccess: (data) => {
-      // Redirect to farmer dashboard on successful login
-      setLocation("/farmer-dashboard");
+    onSuccess: async (data) => {
+      // Invalidate and refetch auth.me so DashboardLayout sees the user immediately
+      await utils.auth.me.invalidate();
+      await utils.auth.me.refetch();
+      // Redirect to dashboard on successful login
+      setLocation("/dashboard");
     },
     onError: (error) => {
       setError(error.message);

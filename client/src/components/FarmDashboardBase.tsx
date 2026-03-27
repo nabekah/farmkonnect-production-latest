@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import { Leaf, Droplets, Thermometer, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -35,7 +35,7 @@ export const FarmDashboardBase: React.FC<FarmDashboardConfig> = ({
   dateRange,
 }) => {
   // First, fetch user's farms to get a valid farmId
-  const { data: userFarms = [] } = trpc.farm.list.useQuery()
+  const { data: userFarms = [] } = trpc.farms.list.useQuery()
   
   // Use the first farm if available, otherwise use initialFarmId or 0
   const defaultFarmId = userFarms.length > 0 ? userFarms[0].id : (initialFarmId || 0)
@@ -44,8 +44,15 @@ export const FarmDashboardBase: React.FC<FarmDashboardConfig> = ({
   const [startDate, setStartDate] = useState<Date | undefined>(dateRange?.[0])
   const [endDate, setEndDate] = useState<Date | undefined>(dateRange?.[1])
 
+  // Sync farmId when userFarms loads (useState only uses initial value)
+  useEffect(() => {
+    if (userFarms.length > 0 && farmId === 0) {
+      setFarmId(userFarms[0].id)
+    }
+  }, [userFarms, farmId])
+
   // Only fetch farm analytics if we have a valid farmId
-  const { data: farmData, isLoading } = trpc.farm.getFarmAnalytics.useQuery(
+  const { data: farmData, isLoading } = trpc.farms.getFarmAnalytics.useQuery(
     {
       farmId,
       startDate,

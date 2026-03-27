@@ -169,6 +169,13 @@ function Router() {
     <Switch>
        <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/dashboard">
+        {() => (
+          <DashboardLayout>
+            <FarmerDashboard />
+          </DashboardLayout>
+        )}
+      </Route>
       <Route path="/verify-email" component={VerifyEmail} />
         <Route path="/register" component={Register} />
       <Route path="/test-email">
