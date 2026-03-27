@@ -1,9 +1,9 @@
-import { router, protectedProcedure } from "../_core/trpc";
+import { router, protectedProcedure, adminProcedure } from "../_core/trpc";
 import { z } from "zod";
 
 export const adminRouter = router({
   // Get dashboard overview
-  getDashboardOverview: protectedProcedure.query(async ({ ctx }) => {
+  getDashboardOverview: adminProcedure.query(async ({ ctx }) => {
     return {
       stats: {
         totalUsers: 5234,
@@ -22,7 +22,7 @@ export const adminRouter = router({
   }),
 
   // Get all users
-  getUsers: protectedProcedure
+  getUsers: adminProcedure
     .input(
       z.object({
         search: z.string().optional(),
@@ -74,7 +74,7 @@ export const adminRouter = router({
     }),
 
   // Get user details
-  getUserDetails: protectedProcedure
+  getUserDetails: adminProcedure
     .input(z.object({ userId: z.number() }))
     .query(async ({ input }) => {
       return {
@@ -107,7 +107,7 @@ export const adminRouter = router({
     }),
 
   // Suspend user
-  suspendUser: protectedProcedure
+  suspendUser: adminProcedure
     .input(z.object({ userId: z.number(), reason: z.string() }))
     .mutation(async ({ input }) => {
       return {
@@ -119,7 +119,7 @@ export const adminRouter = router({
     }),
 
   // Reactivate user
-  reactivateUser: protectedProcedure
+  reactivateUser: adminProcedure
     .input(z.object({ userId: z.number() }))
     .mutation(async ({ input }) => {
       return {
@@ -131,7 +131,7 @@ export const adminRouter = router({
     }),
 
   // Get all transactions
-  getTransactions: protectedProcedure
+  getTransactions: adminProcedure
     .input(
       z.object({
         type: z.enum(['all', 'payment', 'payout', 'refund']).optional(),
@@ -179,7 +179,7 @@ export const adminRouter = router({
     }),
 
   // Get disputes
-  getDisputes: protectedProcedure
+  getDisputes: adminProcedure
     .input(
       z.object({
         status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
@@ -225,7 +225,7 @@ export const adminRouter = router({
     }),
 
   // Resolve dispute
-  resolveDispute: protectedProcedure
+  resolveDispute: adminProcedure
     .input(
       z.object({
         disputeId: z.number(),
@@ -244,7 +244,7 @@ export const adminRouter = router({
     }),
 
   // Get reports
-  getReports: protectedProcedure
+  getReports: adminProcedure
     .input(
       z.object({
         type: z.enum(['user_reports', 'content_reports', 'payment_reports', 'fraud_reports']).optional(),
@@ -281,7 +281,7 @@ export const adminRouter = router({
     }),
 
   // Action on report
-  actionReport: protectedProcedure
+  actionReport: adminProcedure
     .input(
       z.object({
         reportId: z.number(),
@@ -299,7 +299,7 @@ export const adminRouter = router({
     }),
 
   // Get analytics
-  getAnalytics: protectedProcedure
+  getAnalytics: adminProcedure
     .input(
       z.object({
         period: z.enum(['daily', 'weekly', 'monthly', 'yearly']),
@@ -333,7 +333,7 @@ export const adminRouter = router({
     }),
 
   // Send announcement
-  sendAnnouncement: protectedProcedure
+  sendAnnouncement: adminProcedure
     .input(
       z.object({
         title: z.string(),
@@ -354,7 +354,7 @@ export const adminRouter = router({
     }),
 
   // Get system health
-  getSystemHealth: protectedProcedure.query(async () => {
+  getSystemHealth: adminProcedure.query(async () => {
     return {
       status: 'healthy',
       uptime: 99.9,
@@ -372,7 +372,7 @@ export const adminRouter = router({
   }),
 
   // Get audit logs
-  getAuditLogs: protectedProcedure
+  getAuditLogs: adminProcedure
     .input(
       z.object({
         action: z.string().optional(),
@@ -408,7 +408,7 @@ export const adminRouter = router({
     }),
 
   // Get settings
-  getSettings: protectedProcedure.query(async () => {
+  getSettings: adminProcedure.query(async () => {
     return {
       platform: {
         name: 'FarmKonnect',
@@ -429,7 +429,7 @@ export const adminRouter = router({
   }),
 
   // Update settings
-  updateSettings: protectedProcedure
+  updateSettings: adminProcedure
     .input(
       z.object({
         setting: z.string(),

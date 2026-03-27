@@ -6266,4 +6266,14 @@ All components are integrated into the Financial Management Dashboard and tested
 - [x] Identify all routes and menu items (38 main menu pages, 113 total routes)
 - [x] Test all pages on production for errors (673 unique tRPC calls audited)
 - [x] Fix critical errors found during audit (training router mapping: trainingCertificationCleanRouter → trainingRouter)
-- [ ] Deploy fixes to production
+- [x] Deploy fixes to production (training router fix verified on www.farmconnekt.com)
+
+## Security & UX Improvements (March 27, 2026)
+- [x] Add adminProcedure middleware in server/routers.ts for admin-only backend operations
+- [x] Add AdminRoute frontend guard component that redirects non-admins away from /admin-dashboard
+- [x] Protect admin-only tRPC procedures with adminProcedure (all 17 procedures in adminRouter.ts)
+- [x] Create test farmer account (farmer@farmkonnect.com / Farmer@123456, id: 4050024)
+- [x] Verify farmer account redirects to /dashboard (not /admin-dashboard) after login
+- [x] Create reusable PageErrorBoundary component wrapping each main menu page
+- [x] Wrap all 38 main menu pages in PageErrorBoundary in App.tsx
+- [x] Test error boundary catches component errors without crashing the full app

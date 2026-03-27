@@ -163,6 +163,8 @@ import { ProfileMenu } from "./components/ProfileMenu";
 import { TestEmailPage } from "./pages/TestEmail";
 import Login from "./pages/Login";
 import AdminDashboard from "./pages/AdminDashboard";
+import { AdminRoute } from "./components/AdminRoute";
+import PageErrorBoundary from "./components/PageErrorBoundary";
 
 // Build version: 2.0.1 - Force rebuild with all fixes
 function Router() {
@@ -173,15 +175,21 @@ function Router() {
       <Route path="/dashboard">
         {() => (
           <DashboardLayout>
-            <FarmerDashboard />
+            <PageErrorBoundary pageName="Farmer Dashboard">
+              <FarmerDashboard />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/admin-dashboard">
         {() => (
-          <DashboardLayout>
-            <AdminDashboard />
-          </DashboardLayout>
+          <AdminRoute>
+            <DashboardLayout>
+              <PageErrorBoundary pageName="Admin Dashboard">
+                <AdminDashboard />
+              </PageErrorBoundary>
+            </DashboardLayout>
+          </AdminRoute>
         )}
       </Route>
       <Route path="/verify-email" component={VerifyEmail} />
@@ -197,7 +205,9 @@ function Router() {
       <Route path="/report-management">
         {() => (
           <DashboardLayout>
-            <ReportManagement />
+            <PageErrorBoundary pageName="Report Management">
+              <ReportManagement />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -267,14 +277,18 @@ function Router() {
       <Route path="/inventory-management">
         {() => (
           <DashboardLayout>
-            <InventoryManagement />
+            <PageErrorBoundary pageName="Inventory Management">
+              <InventoryManagement />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/soil-health-recommendations">
         {() => (
           <DashboardLayout>
-            <SoilHealthRecommendations />
+            <PageErrorBoundary pageName="Soil Health">
+              <SoilHealthRecommendations />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -454,7 +468,9 @@ function Router() {
       <Route path="/data-management">
         {() => (
           <DashboardLayout>
-            <DataManagement />
+            <PageErrorBoundary pageName="Data Management">
+              <DataManagement />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -466,7 +482,11 @@ function Router() {
         )}
       </Route>
       <Route path="/financial-management">
-        {() => <FinancialManagementPage />}
+        {() => (
+          <PageErrorBoundary pageName="Financial Management">
+            <FinancialManagementPage />
+          </PageErrorBoundary>
+        )}
       </Route>
       <Route path="/crops">
         {() => (
@@ -618,7 +638,9 @@ function Router() {
       <Route path="/marketplace">
         {() => (
           <DashboardLayout>
-            <Marketplace />
+            <PageErrorBoundary pageName="Marketplace">
+              <Marketplace />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -702,14 +724,18 @@ function Router() {
       <Route path="/training">
         {() => (
           <DashboardLayout>
-            <Training />
+            <PageErrorBoundary pageName="Training">
+              <Training />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/merl">
         {() => (
           <DashboardLayout>
-            <MERL />
+            <PageErrorBoundary pageName="MERL">
+              <MERL />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -737,28 +763,36 @@ function Router() {
       <Route path="/weather-alerts">
         {() => (
           <DashboardLayout>
-            <WeatherAlerts />
+            <PageErrorBoundary pageName="Weather Alerts">
+              <WeatherAlerts />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/weather-trends">
         {() => (
           <DashboardLayout>
-            <WeatherTrends />
+            <PageErrorBoundary pageName="Weather Trends">
+              <WeatherTrends />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/settings">
         {() => (
           <DashboardLayout>
-            <Settings />
+            <PageErrorBoundary pageName="Settings">
+              <Settings />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/crop-planning">
         {() => (
           <DashboardLayout>
-            <CropPlanning />
+            <PageErrorBoundary pageName="Crop Planning">
+              <CropPlanning />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -786,28 +820,36 @@ function Router() {
       <Route path="/livestock-management">
         {() => (
           <DashboardLayout>
-            <LivestockManagement />
+            <PageErrorBoundary pageName="Livestock Management">
+              <LivestockManagement />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/workforce-management">
         {() => (
           <DashboardLayout>
-            <WorkforceManagement />
+            <PageErrorBoundary pageName="Workforce Management">
+              <WorkforceManagement />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/fish-farming">
         {() => (
           <DashboardLayout>
-            <FishFarming />
+            <PageErrorBoundary pageName="Fish Farming">
+              <FishFarming />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/asset-management">
         {() => (
           <DashboardLayout>
-            <AssetManagement />
+            <PageErrorBoundary pageName="Asset Management">
+              <AssetManagement />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -828,21 +870,27 @@ function Router() {
       <Route path="/notification-settings">
         {() => (
           <DashboardLayout>
-            <NotificationSettings />
+            <PageErrorBoundary pageName="Notification Settings">
+              <NotificationSettings />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/alert-history">
         {() => (
           <DashboardLayout>
-            <AlertHistory />
+            <PageErrorBoundary pageName="Alert History">
+              <AlertHistory />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
       <Route path="/fertilizer-tracking">
         {() => (
           <DashboardLayout>
-            <FertilizerTracking />
+            <PageErrorBoundary pageName="Fertilizer Tracking">
+              <FertilizerTracking />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -854,7 +902,9 @@ function Router() {
       <Route path="/field-worker/dashboard">
         {() => (
           <DashboardLayout>
-            <FieldWorkerDashboard />
+            <PageErrorBoundary pageName="Field Worker Dashboard">
+              <FieldWorkerDashboard />
+            </PageErrorBoundary>
           </DashboardLayout>
         )}
       </Route>
@@ -996,9 +1046,13 @@ function Router() {
       </Route>
       <Route path="/admin/data-settings">
         {() => (
-          <DashboardLayout>
-            <AdminDataSettings />
-          </DashboardLayout>
+          <AdminRoute>
+            <DashboardLayout>
+              <PageErrorBoundary pageName="Admin Data Settings">
+                <AdminDataSettings />
+              </PageErrorBoundary>
+            </DashboardLayout>
+          </AdminRoute>
         )}
       </Route>
       <Route path="/notification-preferences">
@@ -1031,9 +1085,13 @@ function Router() {
       </Route>
       <Route path="/admin/scheduler">
         {() => (
-          <DashboardLayout>
-            <AdminSchedulerControlPanel />
-          </DashboardLayout>
+          <AdminRoute>
+            <DashboardLayout>
+              <PageErrorBoundary pageName="Admin Scheduler">
+                <AdminSchedulerControlPanel />
+              </PageErrorBoundary>
+            </DashboardLayout>
+          </AdminRoute>
         )}
       </Route>
       <Route path="/admin/user-approval">
