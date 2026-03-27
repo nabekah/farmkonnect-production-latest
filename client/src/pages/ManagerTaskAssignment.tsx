@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
@@ -21,9 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Loader2, CheckCircle2, AlertCircle, Clock, Trash2 } from 'lucide-react';
-import { useLocation } from 'wouter';
-import { useFormValidation } from '@/hooks/useFormValidation';
+import { Plus, Loader2, CheckCircle2, AlertCircle, Clock, Trash2, AlertTriangle, User } from 'lucide-react';
 
 const TASK_TYPES = [
   { value: 'planting', label: 'Planting' },
@@ -39,17 +37,17 @@ const TASK_TYPES = [
 ];
 
 const PRIORITIES = [
-  { value: 'low', label: 'Low', color: 'bg-blue-500' },
-  { value: 'medium', label: 'Medium', color: 'bg-yellow-500' },
-  { value: 'high', label: 'High', color: 'bg-orange-500' },
-  { value: 'urgent', label: 'Urgent', color: 'bg-red-500' },
+  { value: 'low', label: 'Low', color: 'bg-blue-500 text-white' },
+  { value: 'medium', label: 'Medium', color: 'bg-yellow-500 text-white' },
+  { value: 'high', label: 'High', color: 'bg-orange-500 text-white' },
+  { value: 'urgent', label: 'Urgent', color: 'bg-red-500 text-white' },
 ];
 
 const STATUSES = [
-  { value: 'pending', label: 'Pending', icon: Clock },
-  { value: 'in_progress', label: 'In Progress', icon: Clock },
-  { value: 'completed', label: 'Completed', icon: CheckCircle2 },
-  { value: 'cancelled', label: 'Cancelled', icon: AlertCircle },
+  { value: 'pending', label: 'Pending', color: 'bg-yellow-100 text-yellow-800 border border-yellow-300' },
+  { value: 'in_progress', label: 'In Progress', color: 'bg-blue-100 text-blue-800 border border-blue-300' },
+  { value: 'completed', label: 'Completed', color: 'bg-green-100 text-green-800 border border-green-300' },
+  { value: 'cancelled', label: 'Cancelled', color: 'bg-gray-100 text-gray-600 border border-gray-300' },
 ];
 
 interface NewTask {
@@ -65,15 +63,16 @@ interface NewTask {
 
 export function ManagerTaskAssignment() {
   const { user } = useAuth();
-  const [, navigate] = useLocation();
-  const [farmId, setFarmId] = useState<number>(1);
+  const [farmId] = useState<number>(1);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
   const utils = trpc.useUtils();
+  const now = new Date();
 
   const createTaskMutation = trpc.fieldWorker.createTask.useMutation({
     onSuccess: () => {
@@ -86,28 +85,23 @@ export function ManagerTaskAssignment() {
         dueDate: new Date().toISOString().split('T')[0],
         dueTime: '09:00',
         assignedToUserId: 0,
-        fieldId: undefined,
       });
       setIsDialogOpen(false);
     },
   });
 
   const deleteTaskMutation = trpc.fieldWorker.deleteTask.useMutation({
+    onSuccess: () => utils.fieldWorker.getTasks.invalidate({ farmId }),
+  });
+
+  const updateStatusMutation = trpc.fieldWorker.updateTaskStatus.useMutation({
     onSuccess: () => {
       utils.fieldWorker.getTasks.invalidate({ farmId });
+      setUpdatingTaskId(null);
     },
+    onError: () => setUpdatingTaskId(null),
   });
 
-  const { errors, validateForm, clearError } = useFormValidation({
-    title: { required: true, minLength: 3 },
-    description: { required: true, minLength: 10 },
-    taskType: { required: true },
-    priority: { required: true },
-    dueDate: { required: true },
-    assignedToUserId: { required: true, custom: (val) => val > 0 },
-  });
-
-  // Form state
   const [newTask, setNewTask] = useState<NewTask>({
     title: '',
     description: '',
@@ -116,43 +110,34 @@ export function ManagerTaskAssignment() {
     dueDate: new Date().toISOString().split('T')[0],
     dueTime: '09:00',
     assignedToUserId: 0,
-    fieldId: undefined,
   });
 
-  // Fetch real tasks from database
-  const { data: allTasks = [], isLoading: isLoadingTasks } = trpc.fieldWorker.getTasks.useQuery(
-    { farmId },
-    { enabled: true }
-  );
+  const { data: allTasks = [], isLoading: isLoadingTasks } = trpc.fieldWorker.getTasks.useQuery({ farmId });
+  const { data: fieldWorkers = [], isLoading: isLoadingWorkers } = trpc.workforce.workers.list.useQuery({ farmId });
 
-  // Fetch field workers
-  const { data: fieldWorkers = [], isLoading: isLoadingWorkers } = trpc.workforce.workers.list.useQuery(
-    { farmId },
-    { enabled: true }
-  );
-
-  // Set default farmId from user's farm
-  useEffect(() => {
-    if (user) {
-      setFarmId(1);
-    }
-  }, [user]);
-
-  // Filter tasks
   const filteredTasks = useMemo(() => {
     return allTasks.filter((task) => {
       const matchesStatus = filterStatus === 'all' || task.status === filterStatus;
       const matchesPriority = filterPriority === 'all' || task.priority === filterPriority;
       const matchesSearch =
         searchQuery === '' ||
-        task.title.toLowerCase().includes(searchQuery.toLowerCase());
+        task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (task.assignedWorkerName || '').toLowerCase().includes(searchQuery.toLowerCase());
       return matchesStatus && matchesPriority && matchesSearch;
     });
   }, [allTasks, filterStatus, filterPriority, searchQuery]);
 
+  const isOverdue = (task: typeof allTasks[0]) => {
+    if (task.status === 'completed' || task.status === 'cancelled') return false;
+    return new Date(task.dueDate) < now;
+  };
+
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm(newTask)) return;
+    if (!newTask.title.trim() || newTask.assignedToUserId === 0) {
+      alert('Please fill in all required fields and select a worker.');
+      return;
+    }
     setIsSubmitting(true);
     try {
       await createTaskMutation.mutateAsync({
@@ -173,6 +158,19 @@ export function ManagerTaskAssignment() {
     }
   };
 
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
+    setUpdatingTaskId(taskId);
+    try {
+      await updateStatusMutation.mutateAsync({
+        taskId,
+        status: newStatus as 'pending' | 'in_progress' | 'completed',
+      });
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      alert('Failed to update task status. Please try again.');
+    }
+  };
+
   const handleDeleteTask = async (taskId: string) => {
     if (!confirm('Are you sure you want to delete this task?')) return;
     try {
@@ -183,203 +181,150 @@ export function ManagerTaskAssignment() {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    return PRIORITIES.find((p) => p.value === priority)?.color || 'bg-gray-500';
-  };
+  const getPriorityStyle = (priority: string) =>
+    PRIORITIES.find((p) => p.value === priority)?.color || 'bg-gray-500 text-white';
 
-  const getStatusBadgeVariant = (status: string) => {
-    switch (status) {
-      case 'completed': return 'bg-green-500';
-      case 'in_progress': return 'bg-blue-500';
-      case 'pending': return 'bg-yellow-500';
-      case 'cancelled': return 'bg-red-500';
-      default: return 'bg-gray-500';
-    }
-  };
+  const getStatusStyle = (status: string) =>
+    STATUSES.find((s) => s.value === status)?.color || 'bg-gray-100 text-gray-600';
+
+  const overdueCount = allTasks.filter(isOverdue).length;
 
   return (
     <div className="min-h-screen bg-background p-4 md:p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-6 flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Task Management</h1>
+            <h1 className="text-3xl font-bold text-foreground mb-1">Task Management</h1>
             <p className="text-muted-foreground">Assign and monitor field worker tasks</p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="gap-2">
-                <Plus className="h-4 w-4" />
-                Create Task
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Create New Task</DialogTitle>
-                <DialogDescription>Assign a task to a field worker</DialogDescription>
-              </DialogHeader>
-
-              <form onSubmit={handleCreateTask} className="space-y-4">
-                {/* Task Title */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
-                    Task Title <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    value={newTask.title}
-                    onChange={(e) => { setNewTask({ ...newTask, title: e.target.value }); clearError('title'); }}
-                    placeholder="e.g., Monitor crop health in Field A"
-                    required
-                    className={errors.title ? 'border-red-500' : ''}
-                  />
-                  {errors.title && <p className="text-sm text-red-500 mt-1">{errors.title}</p>}
-                </div>
-
-                {/* Task Type */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
-                    Task Type <span className="text-red-500">*</span>
-                  </label>
-                  <Select value={newTask.taskType} onValueChange={(value) => setNewTask({ ...newTask, taskType: value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TASK_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Description */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
-                    Description <span className="text-red-500">*</span>
-                  </label>
-                  <Textarea
-                    value={newTask.description}
-                    onChange={(e) => { setNewTask({ ...newTask, description: e.target.value }); clearError('description'); }}
-                    placeholder="Detailed instructions for the task"
-                    rows={3}
-                    className={errors.description ? 'border-red-500' : ''}
-                  />
-                  {errors.description && <p className="text-sm text-red-500 mt-1">{errors.description}</p>}
-                </div>
-
-                {/* Assign To */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">
-                    Assign To <span className="text-red-500">*</span>
-                  </label>
-                  <Select
-                    value={newTask.assignedToUserId.toString()}
-                    onValueChange={(value) => setNewTask({ ...newTask, assignedToUserId: parseInt(value) })}
-                    disabled={isLoadingWorkers}
-                  >
-                    <SelectTrigger className={isLoadingWorkers ? 'opacity-50' : ''}>
-                      <SelectValue placeholder={isLoadingWorkers ? 'Loading workers...' : 'Select field worker'} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {isLoadingWorkers ? (
-                        <div className="p-2 text-sm text-gray-500 text-center">Loading workers...</div>
-                      ) : fieldWorkers.length === 0 ? (
-                        <div className="p-2 text-sm text-gray-500 text-center">No active workers available</div>
-                      ) : (
-                        fieldWorkers.map((worker) => (
-                          <SelectItem key={worker.id} value={worker.id.toString()}>
-                            {worker.name} {worker.email ? `(${worker.email})` : ''}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  {errors.assignedToUserId && <p className="text-sm text-red-500 mt-1">{errors.assignedToUserId}</p>}
-                </div>
-
-                {/* Priority */}
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-foreground">Priority</label>
-                  <Select value={newTask.priority} onValueChange={(value) => setNewTask({ ...newTask, priority: value })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PRIORITIES.map((priority) => (
-                        <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Due Date & Time */}
-                <div className="grid grid-cols-2 gap-4">
+          <div className="flex items-center gap-3">
+            {overdueCount > 0 && (
+              <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm font-medium">
+                <AlertTriangle className="h-4 w-4" />
+                {overdueCount} overdue task{overdueCount > 1 ? 's' : ''}
+              </div>
+            )}
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Create Task
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Create New Task</DialogTitle>
+                  <DialogDescription>Assign a task to a field worker</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleCreateTask} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-foreground">
-                      Due Date <span className="text-red-500">*</span>
-                    </label>
+                    <label className="block text-sm font-medium mb-1 text-foreground">Task Title *</label>
                     <Input
-                      type="date"
-                      value={newTask.dueDate}
-                      onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+                      value={newTask.title}
+                      onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                      placeholder="e.g., Monitor crop health in Field A"
                       required
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-foreground">Due Time</label>
-                    <Input
-                      type="time"
-                      value={newTask.dueTime}
-                      onChange={(e) => setNewTask({ ...newTask, dueTime: e.target.value })}
+                    <label className="block text-sm font-medium mb-1 text-foreground">Task Type *</label>
+                    <Select value={newTask.taskType} onValueChange={(v) => setNewTask({ ...newTask, taskType: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TASK_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-foreground">Description *</label>
+                    <Textarea
+                      value={newTask.description}
+                      onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                      placeholder="Detailed instructions for the task"
+                      rows={3}
+                      required
                     />
                   </div>
-                </div>
-
-                {/* Submit Button */}
-                <div className="flex gap-3 pt-4">
-                  <Button type="submit" disabled={isSubmitting} className="flex-1">
-                    {isSubmitting ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</>
-                    ) : 'Create Task'}
-                  </Button>
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-foreground">Assign To *</label>
+                    <Select
+                      value={newTask.assignedToUserId > 0 ? newTask.assignedToUserId.toString() : ''}
+                      onValueChange={(v) => setNewTask({ ...newTask, assignedToUserId: parseInt(v) })}
+                      disabled={isLoadingWorkers}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={isLoadingWorkers ? 'Loading workers...' : 'Select field worker'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fieldWorkers.length === 0 ? (
+                          <div className="p-2 text-sm text-muted-foreground text-center">No workers available</div>
+                        ) : (
+                          fieldWorkers.map((w) => (
+                            <SelectItem key={w.id} value={w.id.toString()}>
+                              {w.name}{w.email ? ` (${w.email})` : ''}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1 text-foreground">Priority</label>
+                    <Select value={newTask.priority} onValueChange={(v) => setNewTask({ ...newTask, priority: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-1 text-foreground">Due Date *</label>
+                      <Input type="date" value={newTask.dueDate} onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })} required />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-1 text-foreground">Due Time</label>
+                      <Input type="time" value={newTask.dueTime} onChange={(e) => setNewTask({ ...newTask, dueTime: e.target.value })} />
+                    </div>
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <Button type="submit" disabled={isSubmitting} className="flex-1">
+                      {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : 'Create Task'}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
         <Card className="mb-6">
-          <CardContent className="pt-6">
+          <CardContent className="pt-5">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium mb-2 text-foreground">Search</label>
-                <Input
-                  placeholder="Search tasks..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+                <label className="block text-sm font-medium mb-1 text-foreground">Search</label>
+                <Input placeholder="Search tasks or workers..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2 text-foreground">Status</label>
+                <label className="block text-sm font-medium mb-1 text-foreground">Status</label>
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
-                    {STATUSES.map((status) => (
-                      <SelectItem key={status.value} value={status.value}>{status.label}</SelectItem>
-                    ))}
+                    {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2 text-foreground">Priority</label>
+                <label className="block text-sm font-medium mb-1 text-foreground">Priority</label>
                 <Select value={filterPriority} onValueChange={setFilterPriority}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Priorities</SelectItem>
-                    {PRIORITIES.map((priority) => (
-                      <SelectItem key={priority.value} value={priority.value}>{priority.label}</SelectItem>
-                    ))}
+                    {PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -393,7 +338,7 @@ export function ManagerTaskAssignment() {
         </Card>
 
         {/* Tasks List */}
-        <div className="space-y-4">
+        <div className="space-y-3">
           {isLoadingTasks ? (
             <Card>
               <CardContent className="pt-8 text-center">
@@ -406,95 +351,139 @@ export function ManagerTaskAssignment() {
               <CardContent className="pt-8 text-center">
                 <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
                 <p className="text-muted-foreground">
-                  {allTasks.length === 0 ? 'No tasks yet. Create your first task!' : 'No tasks found matching your filters.'}
+                  {allTasks.length === 0 ? 'No tasks yet. Create your first task!' : 'No tasks match your filters.'}
                 </p>
               </CardContent>
             </Card>
           ) : (
-            filteredTasks.map((task) => (
-              <Card key={task.taskId} className="hover:shadow-lg transition-shadow">
-                <CardContent className="pt-6">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-foreground">{task.title}</h3>
-                        <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
-                        <Badge className={getStatusBadgeVariant(task.status)}>{task.status}</Badge>
+            filteredTasks.map((task) => {
+              const overdue = isOverdue(task);
+              return (
+                <Card
+                  key={task.taskId}
+                  className={`transition-shadow hover:shadow-md ${overdue ? 'border-red-300 bg-red-50/30' : ''}`}
+                >
+                  <CardContent className="pt-5 pb-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        {/* Title row */}
+                        <div className="flex items-center gap-2 flex-wrap mb-2">
+                          {overdue && (
+                            <span className="flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full">
+                              <AlertTriangle className="h-3 w-3" /> OVERDUE
+                            </span>
+                          )}
+                          <h3 className={`text-base font-semibold ${overdue ? 'text-red-700' : 'text-foreground'}`}>
+                            {task.title}
+                          </h3>
+                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getPriorityStyle(task.priority)}`}>
+                            {task.priority}
+                          </span>
+                        </div>
+
+                        {/* Description */}
+                        {task.description && (
+                          <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{task.description}</p>
+                        )}
+
+                        {/* Meta row */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Assigned To</p>
+                            <div className="flex items-center gap-1">
+                              <User className="h-3 w-3 text-muted-foreground" />
+                              <span className="font-medium text-foreground">
+                                {task.assignedWorkerName || `Worker #${task.assignedToUserId}`}
+                              </span>
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Type</p>
+                            <p className="font-medium text-foreground capitalize">{task.taskType.replace(/_/g, ' ')}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Due Date</p>
+                            <p className={`font-medium ${overdue ? 'text-red-600' : 'text-foreground'}`}>
+                              {new Date(task.dueDate).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-muted-foreground mb-0.5">Created</p>
+                            <p className="font-medium text-foreground">{new Date(task.createdAt).toLocaleDateString()}</p>
+                          </div>
+                        </div>
                       </div>
-                      {task.description && (
-                        <p className="text-sm text-muted-foreground mb-3">{task.description}</p>
-                      )}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Type</p>
-                          <p className="font-medium text-foreground capitalize">{task.taskType.replace('_', ' ')}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Assigned To (ID)</p>
-                          <p className="font-medium text-foreground">{task.assignedToUserId}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Due Date</p>
-                          <p className="font-medium text-foreground">
-                            {new Date(task.dueDate).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Created</p>
-                          <p className="font-medium text-foreground">
-                            {new Date(task.createdAt).toLocaleDateString()}
-                          </p>
+
+                      {/* Right side: status dropdown + delete */}
+                      <div className="flex flex-col items-end gap-2 shrink-0">
+                        <div className="flex items-center gap-2">
+                          {updatingTaskId === task.taskId ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          ) : (
+                            <Select
+                              value={task.status}
+                              onValueChange={(v) => handleStatusChange(task.taskId, v)}
+                              disabled={updatingTaskId !== null}
+                            >
+                              <SelectTrigger className={`h-8 text-xs w-36 ${getStatusStyle(task.status)}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {STATUSES.filter(s => s.value !== 'cancelled').map((s) => (
+                                  <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                            onClick={() => handleDeleteTask(task.taskId)}
+                            disabled={deleteTaskMutation.isPending}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-red-500 hover:text-red-600"
-                        onClick={() => handleDeleteTask(task.taskId)}
-                        disabled={deleteTaskMutation.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))
+                  </CardContent>
+                </Card>
+              );
+            })
           )}
         </div>
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-8">
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-sm">Total Tasks</p>
-              <p className="text-3xl font-bold text-foreground">{allTasks.length}</p>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground mb-1">Total Tasks</p>
+              <p className="text-2xl font-bold text-foreground">{allTasks.length}</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-sm">Pending</p>
-              <p className="text-3xl font-bold text-yellow-600">
-                {allTasks.filter((t) => t.status === 'pending').length}
-              </p>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground mb-1">Pending</p>
+              <p className="text-2xl font-bold text-yellow-600">{allTasks.filter((t) => t.status === 'pending').length}</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-sm">In Progress</p>
-              <p className="text-3xl font-bold text-blue-600">
-                {allTasks.filter((t) => t.status === 'in_progress').length}
-              </p>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground mb-1">In Progress</p>
+              <p className="text-2xl font-bold text-blue-600">{allTasks.filter((t) => t.status === 'in_progress').length}</p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="pt-6">
-              <p className="text-muted-foreground text-sm">Completed</p>
-              <p className="text-3xl font-bold text-green-600">
-                {allTasks.filter((t) => t.status === 'completed').length}
-              </p>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground mb-1">Completed</p>
+              <p className="text-2xl font-bold text-green-600">{allTasks.filter((t) => t.status === 'completed').length}</p>
+            </CardContent>
+          </Card>
+          <Card className={overdueCount > 0 ? 'border-red-300' : ''}>
+            <CardContent className="pt-5">
+              <p className="text-xs text-muted-foreground mb-1">Overdue</p>
+              <p className={`text-2xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-foreground'}`}>{overdueCount}</p>
             </CardContent>
           </Card>
         </div>

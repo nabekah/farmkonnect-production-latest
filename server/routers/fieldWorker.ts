@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { getDb } from '../db';
 import { fieldWorkerTasks, taskHistory, users, fieldWorkerActivityLogs } from '../../drizzle/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { broadcastToFarm } from '../_core/websocket';
 
@@ -29,8 +29,24 @@ export const fieldWorkerRouter = router({
 
       try {
         const tasks = await db
-          .select()
+          .select({
+            taskId: fieldWorkerTasks.taskId,
+            farmId: fieldWorkerTasks.farmId,
+            title: fieldWorkerTasks.title,
+            description: fieldWorkerTasks.description,
+            taskType: fieldWorkerTasks.taskType,
+            priority: fieldWorkerTasks.priority,
+            status: fieldWorkerTasks.status,
+            dueDate: fieldWorkerTasks.dueDate,
+            assignedToUserId: fieldWorkerTasks.assignedToUserId,
+            fieldId: fieldWorkerTasks.fieldId,
+            createdAt: fieldWorkerTasks.createdAt,
+            updatedAt: fieldWorkerTasks.updatedAt,
+            assignedWorkerName: users.name,
+            assignedWorkerEmail: users.email,
+          })
           .from(fieldWorkerTasks)
+          .leftJoin(users, eq(fieldWorkerTasks.assignedToUserId, users.id))
           .where(eq(fieldWorkerTasks.farmId, input.farmId))
           .orderBy(desc(fieldWorkerTasks.createdAt));
 
