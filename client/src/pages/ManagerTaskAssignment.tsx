@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuth } from '@/_core/hooks/useAuth';
 import { trpc } from '@/lib/trpc';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -21,7 +22,25 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Plus, Loader2, CheckCircle2, AlertCircle, Clock, Trash2, AlertTriangle, User } from 'lucide-react';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
+import {
+  Plus,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Trash2,
+  AlertTriangle,
+  User,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Send,
+  CheckSquare,
+} from 'lucide-react';
 
 const TASK_TYPES = [
   { value: 'planting', label: 'Planting' },
@@ -61,6 +80,85 @@ interface NewTask {
   fieldId?: number;
 }
 
+// ─── Task Comments Sub-component ────────────────────────────────────────────
+
+function TaskCommentsPanel({ taskId }: { taskId: string }) {
+  const { user } = useAuth();
+  const [newComment, setNewComment] = useState('');
+  const utils = trpc.useUtils();
+
+  const { data: comments = [], isLoading } = trpc.fieldWorker.getTaskComments.useQuery({ taskId });
+
+  const addComment = trpc.fieldWorker.addTaskComment.useMutation({
+    onSuccess: () => {
+      utils.fieldWorker.getTaskComments.invalidate({ taskId });
+      setNewComment('');
+    },
+  });
+
+  const deleteComment = trpc.fieldWorker.deleteTaskComment.useMutation({
+    onSuccess: () => utils.fieldWorker.getTaskComments.invalidate({ taskId }),
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newComment.trim()) return;
+    addComment.mutate({ taskId, content: newComment.trim() });
+  };
+
+  return (
+    <div className="mt-4 pt-4 border-t border-border">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3 flex items-center gap-1">
+        <MessageSquare className="h-3 w-3" /> Comments ({comments.length})
+      </p>
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading comments...</p>
+      ) : comments.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No comments yet. Be the first to add a note.</p>
+      ) : (
+        <div className="space-y-2 mb-3 max-h-48 overflow-y-auto">
+          {comments.map((c) => (
+            <div key={c.commentId} className="flex items-start gap-2 bg-muted/40 rounded-lg px-3 py-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-semibold text-foreground">{c.authorName || 'Unknown'}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(c.createdAt).toLocaleString()}</span>
+                </div>
+                <p className="text-sm text-foreground">{c.content}</p>
+              </div>
+              {user?.id && c.authorEmail === user?.email && (
+                <button
+                  onClick={() => deleteComment.mutate({ commentId: c.commentId })}
+                  className="text-red-400 hover:text-red-600 shrink-0 mt-0.5"
+                  title="Delete comment"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="flex gap-2">
+        <Input
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          placeholder="Add a note or comment..."
+          className="text-sm h-8"
+          maxLength={2000}
+        />
+        <Button type="submit" size="sm" className="h-8 px-3" disabled={!newComment.trim() || addComment.isPending}>
+          {addComment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 export function ManagerTaskAssignment() {
   const { user } = useAuth();
   const [farmId] = useState<number>(1);
@@ -70,6 +168,9 @@ export function ManagerTaskAssignment() {
   const [filterPriority, setFilterPriority] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+  const [expandedComments, setExpandedComments] = useState<Set<string>>(new Set());
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [isBatchUpdating, setIsBatchUpdating] = useState(false);
 
   const utils = trpc.useUtils();
   const now = new Date();
@@ -100,6 +201,16 @@ export function ManagerTaskAssignment() {
       setUpdatingTaskId(null);
     },
     onError: () => setUpdatingTaskId(null),
+  });
+
+  const batchUpdateMutation = trpc.fieldWorker.batchUpdateTaskStatus.useMutation({
+    onSuccess: (data) => {
+      utils.fieldWorker.getTasks.invalidate({ farmId });
+      setSelectedTaskIds(new Set());
+      setIsBatchUpdating(false);
+      alert(`${data.updated} task${data.updated !== 1 ? 's' : ''} updated successfully.`);
+    },
+    onError: () => setIsBatchUpdating(false),
   });
 
   const [newTask, setNewTask] = useState<NewTask>({
@@ -181,6 +292,48 @@ export function ManagerTaskAssignment() {
     }
   };
 
+  const toggleComments = (taskId: string) => {
+    setExpandedComments((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const toggleSelectTask = (taskId: string) => {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedTaskIds.size === filteredTasks.length) {
+      setSelectedTaskIds(new Set());
+    } else {
+      setSelectedTaskIds(new Set(filteredTasks.map((t) => t.taskId)));
+    }
+  };
+
+  const handleBatchComplete = async () => {
+    if (selectedTaskIds.size === 0) return;
+    if (!confirm(`Mark ${selectedTaskIds.size} task${selectedTaskIds.size !== 1 ? 's' : ''} as completed?`)) return;
+    setIsBatchUpdating(true);
+    try {
+      await batchUpdateMutation.mutateAsync({
+        taskIds: Array.from(selectedTaskIds),
+        status: 'completed',
+      });
+    } catch (error) {
+      console.error('Batch update failed:', error);
+      alert('Batch update failed. Please try again.');
+      setIsBatchUpdating(false);
+    }
+  };
+
   const getPriorityStyle = (priority: string) =>
     PRIORITIES.find((p) => p.value === priority)?.color || 'bg-gray-500 text-white';
 
@@ -215,7 +368,7 @@ export function ManagerTaskAssignment() {
               <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Create New Task</DialogTitle>
-                  <DialogDescription>Assign a task to a field worker</DialogDescription>
+                  <DialogDescription>Assign a task to a field worker. An email notification will be sent to the assigned worker.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleCreateTask} className="space-y-4">
                   <div>
@@ -237,13 +390,12 @@ export function ManagerTaskAssignment() {
                     </Select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1 text-foreground">Description *</label>
+                    <label className="block text-sm font-medium mb-1 text-foreground">Description</label>
                     <Textarea
                       value={newTask.description}
                       onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
                       placeholder="Detailed instructions for the task"
                       rows={3}
-                      required
                     />
                   </div>
                   <div>
@@ -258,7 +410,7 @@ export function ManagerTaskAssignment() {
                       </SelectTrigger>
                       <SelectContent>
                         {fieldWorkers.length === 0 ? (
-                          <div className="p-2 text-sm text-muted-foreground text-center">No workers available</div>
+                          <SelectItem value="none" disabled>No workers available</SelectItem>
                         ) : (
                           fieldWorkers.map((w) => (
                             <SelectItem key={w.id} value={w.id.toString()}>
@@ -290,7 +442,7 @@ export function ManagerTaskAssignment() {
                   </div>
                   <div className="flex gap-3 pt-2">
                     <Button type="submit" disabled={isSubmitting} className="flex-1">
-                      {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : 'Create Task'}
+                      {isSubmitting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : 'Create Task & Notify Worker'}
                     </Button>
                     <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
                   </div>
@@ -301,7 +453,7 @@ export function ManagerTaskAssignment() {
         </div>
 
         {/* Filters */}
-        <Card className="mb-6">
+        <Card className="mb-4">
           <CardContent className="pt-5">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
@@ -337,6 +489,38 @@ export function ManagerTaskAssignment() {
           </CardContent>
         </Card>
 
+        {/* Batch Actions Bar */}
+        {filteredTasks.length > 0 && (
+          <div className="flex items-center gap-3 mb-3 px-1">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="select-all"
+                checked={selectedTaskIds.size === filteredTasks.length && filteredTasks.length > 0}
+                onCheckedChange={toggleSelectAll}
+              />
+              <label htmlFor="select-all" className="text-sm text-muted-foreground cursor-pointer select-none">
+                {selectedTaskIds.size > 0 ? `${selectedTaskIds.size} selected` : 'Select all'}
+              </label>
+            </div>
+            {selectedTaskIds.size > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-2 border-green-300 text-green-700 hover:bg-green-50"
+                onClick={handleBatchComplete}
+                disabled={isBatchUpdating}
+              >
+                {isBatchUpdating ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <CheckSquare className="h-3 w-3" />
+                )}
+                Mark {selectedTaskIds.size} as Completed
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Tasks List */}
         <div className="space-y-3">
           {isLoadingTasks ? (
@@ -358,13 +542,23 @@ export function ManagerTaskAssignment() {
           ) : (
             filteredTasks.map((task) => {
               const overdue = isOverdue(task);
+              const isCommentsOpen = expandedComments.has(task.taskId);
+              const isSelected = selectedTaskIds.has(task.taskId);
               return (
                 <Card
                   key={task.taskId}
-                  className={`transition-shadow hover:shadow-md ${overdue ? 'border-red-300 bg-red-50/30' : ''}`}
+                  className={`transition-shadow hover:shadow-md ${overdue ? 'border-red-300 bg-red-50/30' : ''} ${isSelected ? 'ring-2 ring-primary/40' : ''}`}
                 >
                   <CardContent className="pt-5 pb-4">
                     <div className="flex items-start justify-between gap-4">
+                      {/* Checkbox */}
+                      <div className="pt-1 shrink-0">
+                        <Checkbox
+                          checked={isSelected}
+                          onCheckedChange={() => toggleSelectTask(task.taskId)}
+                        />
+                      </div>
+
                       <div className="flex-1 min-w-0">
                         {/* Title row */}
                         <div className="flex items-center gap-2 flex-wrap mb-2">
@@ -412,6 +606,19 @@ export function ManagerTaskAssignment() {
                             <p className="font-medium text-foreground">{new Date(task.createdAt).toLocaleDateString()}</p>
                           </div>
                         </div>
+
+                        {/* Comments toggle */}
+                        <button
+                          onClick={() => toggleComments(task.taskId)}
+                          className="mt-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <MessageSquare className="h-3 w-3" />
+                          {isCommentsOpen ? 'Hide comments' : 'Show comments'}
+                          {isCommentsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                        </button>
+
+                        {/* Comments panel */}
+                        {isCommentsOpen && <TaskCommentsPanel taskId={task.taskId} />}
                       </div>
 
                       {/* Right side: status dropdown + delete */}

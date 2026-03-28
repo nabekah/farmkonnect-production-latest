@@ -6277,3 +6277,11 @@ All components are integrated into the Financial Management Dashboard and tested
 - [ ] Create reusable PageErrorBoundary component wrapping each main menu page
 - [ ] Wrap all 38 main menu pages in PageErrorBoundary in App.tsx
 - [ ] Test error boundary catches component errors without crashing the full app
+
+## Task Management Enhancements Round 2 (March 28, 2026)
+- [ ] Add taskComments table to schema and migrate DB
+- [ ] Add addTaskComment / getTaskComments / deleteTaskComment procedures to fieldWorker router
+- [ ] Show task comments panel in ManagerTaskAssignment (expandable per task)
+- [ ] Send email to assigned worker via SendGrid when createTask is called
+- [ ] Add batch status update: checkboxes on tasks + Mark Selected as Completed button
+- [ ] Add batchUpdateTaskStatus procedure to fieldWorker router

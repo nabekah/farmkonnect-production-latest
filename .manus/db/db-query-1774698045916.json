@@ -1,0 +1,9 @@
+{
+  "query": "CREATE TABLE IF NOT EXISTS `taskComments` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `commentId` varchar(50) NOT NULL,\n  `taskId` varchar(50) NOT NULL,\n  `authorUserId` int NOT NULL,\n  `content` text NOT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `taskComments_id` PRIMARY KEY(`id`),\n  CONSTRAINT `taskComments_commentId_unique` UNIQUE(`commentId`)\n);",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway03.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 2kNF22PapS9mysw.root --database WZQk4bD8DnsRHwYBkmh7FN --execute CREATE TABLE IF NOT EXISTS `taskComments` (\n  `id` int AUTO_INCREMENT NOT NULL,\n  `commentId` varchar(50) NOT NULL,\n  `taskId` varchar(50) NOT NULL,\n  `authorUserId` int NOT NULL,\n  `content` text NOT NULL,\n  `createdAt` timestamp NOT NULL DEFAULT (now()),\n  `updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,\n  CONSTRAINT `taskComments_id` PRIMARY KEY(`id`),\n  CONSTRAINT `taskComments_commentId_unique` UNIQUE(`commentId`)\n);",
+  "rows": [],
+  "messages": [],
+  "stdout": "",
+  "stderr": "",
+  "execution_time_ms": 453
+}

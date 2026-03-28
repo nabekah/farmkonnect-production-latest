@@ -7,7 +7,8 @@ import { router, protectedProcedure } from '../_core/trpc';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { getDb } from '../db';
-import { fieldWorkerTasks, taskHistory, users, fieldWorkerActivityLogs } from '../../drizzle/schema';
+import { fieldWorkerTasks, taskHistory, users, fieldWorkerActivityLogs, taskComments } from '../../drizzle/schema';
+import { emailNotifications } from '../_core/emailNotifications';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { broadcastToFarm } from '../_core/websocket';
@@ -591,6 +592,42 @@ export const fieldWorkerRouter = router({
           timestamp: now.toISOString(),
         });
 
+        // Send email notification to assigned worker
+        try {
+          const workerRows = await db.select({ name: users.name, email: users.email })
+            .from(users)
+            .where(eq(users.id, input.assignedToUserId))
+            .limit(1);
+          if (workerRows.length > 0) {
+            const worker = workerRows[0];
+            const dueDateStr = new Date(input.dueDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const assignerName = ctx.user.name || 'Your Manager';
+            await emailNotifications['sendEmail'](
+              worker.email,
+              `New Task Assigned: ${input.title}`,
+              `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+                <div style="background:#2D5016;color:white;padding:20px;text-align:center;"><h1>FarmKonnect Task Assignment</h1></div>
+                <div style="padding:20px;background:#f9f9f9;">
+                  <p>Hi ${worker.name},</p>
+                  <p>You have been assigned a new task by <strong>${assignerName}</strong>.</p>
+                  <div style="background:white;border-left:4px solid #2D5016;padding:15px;margin:20px 0;">
+                    <h3 style="margin-top:0;color:#2D5016;">Task Details</h3>
+                    <p><strong>Title:</strong> ${input.title}</p>
+                    <p><strong>Type:</strong> ${input.taskType}</p>
+                    <p><strong>Priority:</strong> ${input.priority.toUpperCase()}</p>
+                    <p><strong>Due Date:</strong> ${dueDateStr}</p>
+                    ${input.description ? `<p><strong>Description:</strong> ${input.description}</p>` : ''}
+                  </div>
+                  <p>Please log in to FarmKonnect to view and update your task status.</p>
+                </div>
+              </div>`,
+              `Hi ${worker.name}, you have been assigned a new task: "${input.title}" (${input.priority} priority, due ${dueDateStr}). Assigned by ${assignerName}.`
+            );
+          }
+        } catch (emailError) {
+          console.warn('Failed to send task assignment email:', emailError);
+        }
+
         return { success: true, taskId };
       } catch (error) {
         console.error('Failed to create task:', error);
@@ -608,21 +645,90 @@ export const fieldWorkerRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) {
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Database not available',
-        });
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database not available' });
       }
-
       try {
         await db.delete(fieldWorkerTasks).where(eq(fieldWorkerTasks.taskId, input.taskId));
         return { success: true };
       } catch (error) {
         console.error('Failed to delete task:', error);
-        throw new TRPCError({
-          code: 'INTERNAL_SERVER_ERROR',
-          message: 'Failed to delete task',
-        });
+        throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Failed to delete task' });
       }
+    }),
+
+  // ─── Task Comments ───────────────────────────────────────────────────────────
+
+  getTaskComments: protectedProcedure
+    .input(z.object({ taskId: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database not available' });
+      const comments = await db
+        .select({
+          commentId: taskComments.commentId,
+          taskId: taskComments.taskId,
+          content: taskComments.content,
+          createdAt: taskComments.createdAt,
+          authorName: users.name,
+          authorEmail: users.email,
+        })
+        .from(taskComments)
+        .leftJoin(users, eq(taskComments.authorUserId, users.id))
+        .where(eq(taskComments.taskId, input.taskId))
+        .orderBy(desc(taskComments.createdAt));
+      return comments;
+    }),
+
+  addTaskComment: protectedProcedure
+    .input(z.object({
+      taskId: z.string(),
+      content: z.string().min(1).max(2000),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database not available' });
+      const commentId = uuidv4();
+      const now = new Date();
+      await db.insert(taskComments).values({
+        commentId,
+        taskId: input.taskId,
+        authorUserId: ctx.user.id,
+        content: input.content,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { success: true, commentId };
+    }),
+
+  deleteTaskComment: protectedProcedure
+    .input(z.object({ commentId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database not available' });
+      await db.delete(taskComments).where(
+        and(eq(taskComments.commentId, input.commentId), eq(taskComments.authorUserId, ctx.user.id))
+      );
+      return { success: true };
+    }),
+
+  // ─── Batch Status Update ─────────────────────────────────────────────────────
+
+  batchUpdateTaskStatus: protectedProcedure
+    .input(z.object({
+      taskIds: z.array(z.string()).min(1).max(100),
+      status: z.enum(['pending', 'in_progress', 'completed']),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Database not available' });
+      const now = new Date();
+      let updated = 0;
+      for (const taskId of input.taskIds) {
+        await db.update(fieldWorkerTasks)
+          .set({ status: input.status, updatedAt: now })
+          .where(eq(fieldWorkerTasks.taskId, taskId));
+        updated++;
+      }
+      return { success: true, updated };
     }),
 });

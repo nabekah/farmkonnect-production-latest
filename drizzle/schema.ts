@@ -1934,6 +1934,22 @@ export type FieldWorkerTask = typeof fieldWorkerTasks.$inferSelect;
 export type InsertFieldWorkerTask = typeof fieldWorkerTasks.$inferInsert;
 
 /**
+ * Task Comments
+ * Manager/worker notes attached to a specific task
+ */
+export const taskComments = mysqlTable("taskComments", {
+  id: int("id").autoincrement().primaryKey(),
+  commentId: varchar("commentId", { length: 50 }).notNull().unique(),
+  taskId: varchar("taskId", { length: 50 }).notNull(),
+  authorUserId: int("authorUserId").notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type TaskComment = typeof taskComments.$inferSelect;
+export type InsertTaskComment = typeof taskComments.$inferInsert;
+
+/**
  * Field Worker Activity Logs
  * Real-time logging of field worker activities
  */
